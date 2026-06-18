@@ -4,8 +4,15 @@ import {
   benchBoardUnit,
   boardUnitCap,
   buyShopUnit,
+  buyExperience,
+  calculateInterest,
+  calculateStreakBonus,
+  calculateWaveIncome,
   createRunState,
+  expToNextLevel,
   placeBenchUnit,
+  rerollShop,
+  refundForUnit,
   sellUnit,
   startCombat,
   stepRunCombat,
@@ -88,5 +95,130 @@ describe("M3 run state", () => {
     expect(state.waveIndex).toBe(2);
     expect(state.gold).toBeGreaterThanOrEqual(5);
     expect(state.shop.filter(Boolean)).toHaveLength(5);
+  });
+});
+
+describe("M4 economy and star progression", () => {
+  it("calculates interest, streak bonus, and clean-wave income", () => {
+    const state = createRunState(501, CHAPTER_1_LEVEL, CONTENT);
+    state.gold = 37;
+    state.winStreak = 4;
+
+    expect(calculateInterest(0)).toBe(0);
+    expect(calculateInterest(57)).toBe(5);
+    expect(calculateStreakBonus(0, 0)).toBe(0);
+    expect(calculateStreakBonus(2, 0)).toBe(1);
+    expect(calculateStreakBonus(0, 4)).toBe(2);
+    expect(calculateStreakBonus(5, 0)).toBe(3);
+    expect(calculateWaveIncome(state, true)).toEqual({
+      base: 5,
+      interest: 3,
+      streak: 2,
+      cleanWave: 1,
+      total: 11,
+    });
+  });
+
+  it("buys EXP and advances through the product level table", () => {
+    const state = createRunState(502, CHAPTER_1_LEVEL, CONTENT);
+    state.gold = 20;
+
+    expect(expToNextLevel(state)).toBe(2);
+    expect(buyExperience(state)).toEqual({ ok: true });
+    expect(state.gold).toBe(16);
+    expect(state.playerLevel).toBe(3);
+    expect(state.exp).toBe(0);
+    expect(boardUnitCap(state)).toBe(5);
+  });
+
+  it("charges reroll cost and keeps seeded shop slots full", () => {
+    const state = createRunState(503, CHAPTER_1_LEVEL, CONTENT);
+    state.gold = 2;
+
+    expect(rerollShop(state, UNIT_DEFS)).toEqual({ ok: true });
+    expect(state.gold).toBe(0);
+    expect(state.shop.filter(Boolean)).toHaveLength(5);
+    expect(rerollShop(state, UNIT_DEFS)).toEqual({
+      ok: false,
+      error: "not enough gold",
+    });
+  });
+
+  it("auto-merges three matching units and applies star-rank refunds", () => {
+    const state = createRunState(504, CHAPTER_1_LEVEL, CONTENT);
+    state.gold = 10;
+    state.shop[0] = { unitId: "iron-guard", cost: 1 };
+    state.shop[1] = { unitId: "iron-guard", cost: 1 };
+    state.shop[2] = { unitId: "iron-guard", cost: 1 };
+
+    expect(buyShopUnit(state, 0)).toEqual({ ok: true });
+    expect(buyShopUnit(state, 1)).toEqual({ ok: true });
+    expect(buyShopUnit(state, 2)).toEqual({ ok: true });
+    expect(state.bench).toHaveLength(1);
+    expect(state.bench[0]).toEqual(
+      expect.objectContaining({ unitId: "iron-guard", star: 2 }),
+    );
+    expect(refundForUnit(1, 1)).toBe(1);
+    expect(refundForUnit(1, 2)).toBe(2);
+    expect(refundForUnit(2, 3)).toBe(17);
+  });
+
+  it("uses the current player level cap for board placement", () => {
+    const state = createRunState(505, CHAPTER_1_LEVEL, CONTENT);
+    state.playerLevel = 1;
+    state.bench = [
+      { id: "unit-a", unitId: "iron-guard", star: 1, tile: null },
+      { id: "unit-b", unitId: "trainee-archer", star: 1, tile: null },
+      { id: "unit-c", unitId: "dagger", star: 1, tile: null },
+      { id: "unit-d", unitId: "frost-knight", star: 1, tile: null },
+    ];
+
+    expect(placeBenchUnit(state, "unit-a", { gx: 2, gy: 2 })).toEqual({
+      ok: true,
+    });
+    expect(placeBenchUnit(state, "unit-b", { gx: 3, gy: 2 })).toEqual({
+      ok: true,
+    });
+    expect(placeBenchUnit(state, "unit-c", { gx: 4, gy: 2 })).toEqual({
+      ok: true,
+    });
+    expect(placeBenchUnit(state, "unit-d", { gx: 5, gy: 2 })).toEqual({
+      ok: false,
+      error: "board is full",
+    });
+  });
+
+  it("updates streaks, automatic EXP, and income when combat resolves", () => {
+    const state = createRunState(506, CHAPTER_1_LEVEL, CONTENT);
+    state.gold = 20;
+    state.board = [
+      {
+        id: "unit-carry",
+        unitId: "mecha-general",
+        star: 3,
+        tile: { gx: 5, gy: 4 },
+      },
+    ];
+
+    expect(startCombat(state, CONTENT)).toEqual({ ok: true });
+    if (!state.combatWorld) throw new Error("expected combat world");
+    state.combatWorld.waveEnded = true;
+    state.combatWorld.leakedEnemyCount = 0;
+    stepRunCombat(state, 100, CONTENT);
+
+    expect(state.phase).toBe("setup");
+    expect(state.waveIndex).toBe(2);
+    expect(state.winStreak).toBe(1);
+    expect(state.lossStreak).toBe(0);
+    expect(state.playerLevel).toBe(2);
+    expect(state.exp).toBe(0);
+    expect(state.lastIncome).toEqual({
+      base: 5,
+      interest: 2,
+      streak: 0,
+      cleanWave: 1,
+      total: 8,
+    });
+    expect(state.gold).toBe(28);
   });
 });

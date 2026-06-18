@@ -63,6 +63,28 @@ simulation utilities, and isometric board interaction described in
 - The browser HUD exposes phase, gold, player level, wave, shop, bench, selected
   unit/tile, and M3 controls for buy/place/sell/start interactions.
 
+## M4 Economy & Stars Contract
+
+- Wave income uses the product formula: base gold plus interest capped at 5,
+  streak bonus from the absolute win/loss streak, and a clean-wave bonus when
+  the home base took no damage.
+- Combat resolution updates win/loss streaks deterministically from home-base
+  damage, grants the next setup income, and keeps the run in setup until the
+  final result.
+- Player level and EXP follow the product table; each resolved wave grants
+  automatic EXP, and buying EXP costs 4 gold for 4 EXP with deterministic
+  multi-level progression.
+- Board placement is limited by the unit cap associated with the current player
+  level.
+- Selling units refunds according to star rank and original unit cost:
+  1-star = cost, 2-star = cost x 3 - 1, 3-star = cost x 9 - 1.
+- Buying or moving units triggers auto-merge: three units with the same
+  definition and star rank merge into one higher-star unit up to 3-star.
+- Shop reroll costs 2 gold, refuses when gold is insufficient, and rolls from
+  the seeded shop RNG.
+- The browser HUD exposes interest, streaks, EXP progress, level cap, reroll,
+  buy EXP, star rank, and refund information for the M4 slice.
+
 ## Non-Goals
 
 - M0 has no combat, shop, data loading, spritesheet animation, audio, save data,
@@ -73,6 +95,8 @@ simulation utilities, and isometric board interaction described in
   save data, audio, or real spritesheet atlas loading.
 - M3 has no reroll cost, buy EXP, interest, streaks, auto-merge, item handling,
   synergy buffs, boss behavior, save data, audio, or real drag-and-drop UI.
+- M4 has no synergy buffs, item handling, boss behavior, save data, audio, real
+  drag-and-drop UI, or campaign/meta progression.
 - No WebGL, Tauri, or external game engine.
 
 ## Validation Expectations
@@ -85,4 +109,6 @@ simulation utilities, and isometric board interaction described in
   damage calculation, deterministic wave outcomes, and enemy death handling.
 - Unit tests cover M3 seeded shop determinism, buy/place/sell constraints, phase
   transitions, and one-wave setup-to-combat resolution.
+- Unit tests cover M4 income, streaks, EXP/level progression, reroll cost,
+  star-rank refunds, auto-merge, and level-cap placement.
 - A production build must succeed.

@@ -10,6 +10,7 @@ import {
 import type { BoardActor } from "./staticBoard";
 
 export type RunPhase = "setup" | "combat" | "result";
+export type RunResult = "victory" | "defeat" | null;
 
 export interface UnitInstance {
   id: string;
@@ -29,12 +30,18 @@ export interface RunState {
   level: LevelDef;
   waveIndex: number;
   playerLevel: number;
+  exp: number;
   gold: number;
+  homeHp: number;
+  homeHpMax: number;
+  winStreak: number;
+  lossStreak: number;
+  lastIncome: IncomeBreakdown;
   bench: UnitInstance[];
   board: UnitInstance[];
   shop: (ShopSlot | null)[];
   combatWorld: CombatWorld | null;
-  result: "victory" | null;
+  result: RunResult;
   privateState: {
     nextUnitId: number;
     shopRng: Rng;
@@ -51,8 +58,23 @@ export interface RunActionResult {
   error?: string;
 }
 
+export interface IncomeBreakdown {
+  base: number;
+  interest: number;
+  streak: number;
+  cleanWave: number;
+  total: number;
+}
+
 const SHOP_SIZE = 5;
 const BENCH_CAPACITY = 8;
+const WAVE_BASE_GOLD = 5;
+const CLEAN_WAVE_BONUS = 1;
+const REROLL_COST = 2;
+const BUY_EXP_COST = 4;
+const BUY_EXP_AMOUNT = 4;
+const AUTO_EXP_PER_WAVE = 2;
+const HOME_HP_BASE = 30;
 const PLAYER_LEVEL_UNIT_CAP: Record<number, number> = {
   1: 3,
   2: 4,
@@ -63,6 +85,17 @@ const PLAYER_LEVEL_UNIT_CAP: Record<number, number> = {
   7: 9,
   8: 10,
   9: 11,
+};
+const EXP_TO_NEXT_LEVEL: Record<number, number> = {
+  1: 2,
+  2: 2,
+  3: 6,
+  4: 10,
+  5: 20,
+  6: 36,
+  7: 56,
+  8: 80,
+  9: Number.POSITIVE_INFINITY,
 };
 
 const SHOP_ODDS: Record<number, readonly { cost: UnitCost; weight: number }[]> = {
@@ -123,7 +156,19 @@ export function createRunState(
     level,
     waveIndex: level.waves[0]?.index ?? 1,
     playerLevel: 1,
+    exp: 0,
     gold: level.waves[0]?.prepGold ?? 0,
+    homeHp: HOME_HP_BASE,
+    homeHpMax: HOME_HP_BASE,
+    winStreak: 0,
+    lossStreak: 0,
+    lastIncome: {
+      base: level.waves[0]?.prepGold ?? WAVE_BASE_GOLD,
+      interest: 0,
+      streak: 0,
+      cleanWave: 0,
+      total: level.waves[0]?.prepGold ?? WAVE_BASE_GOLD,
+    },
     bench: [],
     board: [],
     shop: Array.from({ length: SHOP_SIZE }, () => null),
@@ -148,6 +193,17 @@ export function rollShop(
   );
 }
 
+export function rerollShop(
+  state: RunState,
+  unitDefs: readonly UnitDef[],
+): RunActionResult {
+  if (state.phase !== "setup") return fail("shop is locked during combat");
+  if (state.gold < REROLL_COST) return fail("not enough gold");
+  state.gold -= REROLL_COST;
+  rollShop(state, unitDefs);
+  return { ok: true };
+}
+
 export function buyShopUnit(
   state: RunState,
   slotIndex: number,
@@ -161,12 +217,21 @@ export function buyShopUnit(
   state.gold -= slot.cost;
   state.shop[slotIndex] = null;
   state.bench.push({
-    id: `unit-${state.privateState.nextUnitId.toString().padStart(3, "0")}`,
+    id: nextUnitInstanceId(state),
     unitId: slot.unitId,
     star: 1,
     tile: null,
   });
-  state.privateState.nextUnitId += 1;
+  autoMergeUnits(state);
+  return { ok: true };
+}
+
+export function buyExperience(state: RunState): RunActionResult {
+  if (state.phase !== "setup") return fail("experience is locked during combat");
+  if (state.playerLevel >= 9) return fail("player level is maxed");
+  if (state.gold < BUY_EXP_COST) return fail("not enough gold");
+  state.gold -= BUY_EXP_COST;
+  grantExperience(state, BUY_EXP_AMOUNT);
   return { ok: true };
 }
 
@@ -189,6 +254,7 @@ export function placeBenchUnit(
   const [unit] = state.bench.splice(index, 1);
   unit.tile = tile;
   state.board.push(unit);
+  autoMergeUnits(state);
   return { ok: true };
 }
 
@@ -204,6 +270,7 @@ export function benchBoardUnit(
   const [unit] = state.board.splice(index, 1);
   unit.tile = null;
   state.bench.push(unit);
+  autoMergeUnits(state);
   return { ok: true };
 }
 
@@ -234,7 +301,12 @@ export function startCombat(
     enemyDefs: content.enemies,
     allies: state.board.map((unit) => {
       if (!unit.tile) throw new Error(`Board unit missing tile: ${unit.id}`);
-      return { id: unit.id, unitId: unit.unitId, tile: unit.tile };
+      return {
+        id: unit.id,
+        unitId: unit.unitId,
+        star: unit.star,
+        tile: unit.tile,
+      };
     }),
   });
   state.phase = "combat";
@@ -250,17 +322,23 @@ export function stepRunCombat(
   stepCombatWorld(state.combatWorld, dtMs);
   if (!state.combatWorld.waveEnded) return;
 
+  const leakedEnemies = state.combatWorld.leakedEnemyCount;
+  state.homeHp = Math.max(0, state.homeHp - leakedEnemies);
+  const cleanWave = leakedEnemies === 0;
+  updateStreaks(state, cleanWave);
+  grantExperience(state, AUTO_EXP_PER_WAVE);
   const nextWave = state.level.waves.find((wave) => wave.index > state.waveIndex);
   state.combatWorld = null;
-  if (!nextWave) {
+  if (!nextWave || state.homeHp <= 0) {
     state.phase = "result";
-    state.result = "victory";
+    state.result = state.homeHp > 0 ? "victory" : "defeat";
     return;
   }
 
   state.waveIndex = nextWave.index;
   state.phase = "setup";
-  state.gold += nextWave.prepGold;
+  state.lastIncome = calculateWaveIncome(state, cleanWave);
+  state.gold += state.lastIncome.total;
   rollShop(state, content.units);
 }
 
@@ -302,6 +380,38 @@ export function refundForUnit(cost: UnitCost, star: 1 | 2 | 3): number {
   return cost * 3 ** (star - 1) - 1;
 }
 
+export function expToNextLevel(state: RunState): number {
+  return EXP_TO_NEXT_LEVEL[state.playerLevel] ?? EXP_TO_NEXT_LEVEL[9];
+}
+
+export function calculateInterest(gold: number): number {
+  return Math.min(Math.floor(gold / 10), 5);
+}
+
+export function calculateStreakBonus(winStreak: number, lossStreak: number): number {
+  const streak = Math.max(Math.abs(winStreak), Math.abs(lossStreak));
+  if (streak >= 5) return 3;
+  if (streak >= 4) return 2;
+  if (streak >= 2) return 1;
+  return 0;
+}
+
+export function calculateWaveIncome(
+  state: RunState,
+  cleanWave: boolean,
+): IncomeBreakdown {
+  const interest = calculateInterest(state.gold);
+  const streak = calculateStreakBonus(state.winStreak, state.lossStreak);
+  const cleanWaveGold = cleanWave ? CLEAN_WAVE_BONUS : 0;
+  return {
+    base: WAVE_BASE_GOLD,
+    interest,
+    streak,
+    cleanWave: cleanWaveGold,
+    total: WAVE_BASE_GOLD + interest + streak + cleanWaveGold,
+  };
+}
+
 function rollShopSlot(
   state: RunState,
   unitDefs: readonly UnitDef[],
@@ -321,6 +431,75 @@ function rollUnitCost(state: RunState): UnitCost {
     if (roll < 0) return item.cost;
   }
   return odds[odds.length - 1].cost;
+}
+
+function grantExperience(state: RunState, amount: number): void {
+  if (state.playerLevel >= 9) return;
+  state.exp += amount;
+  while (state.playerLevel < 9 && state.exp >= expToNextLevel(state)) {
+    state.exp -= expToNextLevel(state);
+    state.playerLevel += 1;
+  }
+}
+
+function updateStreaks(state: RunState, cleanWave: boolean): void {
+  if (cleanWave) {
+    state.winStreak += 1;
+    state.lossStreak = 0;
+  } else {
+    state.lossStreak += 1;
+    state.winStreak = 0;
+  }
+}
+
+function autoMergeUnits(state: RunState): void {
+  let merged = true;
+  while (merged) {
+    merged = false;
+    const units = [...state.board, ...state.bench].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    );
+    const match = units.find((unit) => {
+      if (unit.star >= 3) return false;
+      return (
+        units.filter(
+          (candidate) =>
+            candidate.unitId === unit.unitId && candidate.star === unit.star,
+        ).length >= 3
+      );
+    });
+    if (!match) continue;
+
+    const consumed = units
+      .filter(
+        (unit) => unit.unitId === match.unitId && unit.star === match.star,
+      )
+      .slice(0, 3);
+    const boardHost = consumed.find((unit) => unit.tile);
+    const mergedUnit: UnitInstance = {
+      id: nextUnitInstanceId(state),
+      unitId: match.unitId,
+      star: (match.star + 1) as 2 | 3,
+      tile: boardHost?.tile ?? null,
+    };
+    const consumedIds = new Set(consumed.map((unit) => unit.id));
+    state.board = state.board.filter((unit) => !consumedIds.has(unit.id));
+    state.bench = state.bench.filter((unit) => !consumedIds.has(unit.id));
+    if (mergedUnit.tile) {
+      state.board.push(mergedUnit);
+      state.board.sort((a, b) => a.id.localeCompare(b.id));
+    } else {
+      state.bench.push(mergedUnit);
+      state.bench.sort((a, b) => a.id.localeCompare(b.id));
+    }
+    merged = true;
+  }
+}
+
+function nextUnitInstanceId(state: RunState): string {
+  const id = `unit-${state.privateState.nextUnitId.toString().padStart(3, "0")}`;
+  state.privateState.nextUnitId += 1;
+  return id;
 }
 
 function removeUnitById(

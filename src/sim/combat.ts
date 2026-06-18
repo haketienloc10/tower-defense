@@ -9,6 +9,7 @@ import {
 export interface CombatSetupAlly {
   id: string;
   unitId: string;
+  star?: 1 | 2 | 3;
   tile: GridCoord;
 }
 
@@ -73,15 +74,17 @@ export function createCombatWorld(input: CombatWorldInput): CombatWorld {
   const allies = input.allies.map((setup): CombatEntity => {
     const def = unitDefs.get(setup.unitId);
     if (!def) throw new Error(`Missing unit definition: ${setup.unitId}`);
+    const star = setup.star ?? 1;
+    const statMultiplier = def.starScaling ** (star - 1);
     return {
       id: setup.id,
       team: "ally",
       defId: def.id,
       name: def.name,
       tile: setup.tile,
-      hp: def.baseStats.hp,
-      maxHp: def.baseStats.hp,
-      atk: def.baseStats.atk,
+      hp: def.baseStats.hp * statMultiplier,
+      maxHp: def.baseStats.hp * statMultiplier,
+      atk: def.baseStats.atk * statMultiplier,
       atkSpeed: def.baseStats.atkSpeed,
       range: def.baseStats.range,
       armor: def.baseStats.armor,

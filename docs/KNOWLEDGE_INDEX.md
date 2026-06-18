@@ -17,7 +17,9 @@ selection, typed content data, static unit placement và deterministic depth
 sorting. M2 combat lõi đã có pure simulation cho enemy spawn, flow-field
 movement, nearest-target attacks, armor mitigation, enemy death và HUD combat
 progress. M3 thêm run state setup/combat/result, deterministic shop,
-buy/place/sell từ shop và bench, cùng browser controls để chơi qua một wave.
+buy/place/sell từ shop và bench. M4 thêm kinh tế wave với lãi/chuỗi/clean bonus,
+EXP/level cap, reroll, buy EXP, refund theo sao, auto-merge 3-to-1 và browser
+controls cho các hành vi đó.
 
 <!-- KNOWLEDGE:PURPOSE:END -->
 
@@ -68,7 +70,7 @@ buy/place/sell từ shop và bench, cùng browser controls để chơi qua một
 - `src/platform/` — Browser/platform wiring như canvas setup và resize.
 - `src/render/` — Canvas 2D rendering cho board, tiles và HUD.
 - `src/sim/` — Pure simulation-facing helpers for static board actor creation,
-  M2 combat world updates, and M3 run/shop state.
+  M2 combat world updates, M3 run/shop state, and M4 economy/star progression.
 
 ## Key Concepts
 

@@ -13,11 +13,15 @@ import { CHAPTER_1_LEVEL, ENEMY_DEFS, UNIT_DEFS } from "./data/gameData";
 import {
   benchBoardUnit,
   boardUnitCap,
+  buyExperience,
   buyShopUnit,
   createRunBoardActors,
   createRunState,
+  expToNextLevel,
   getUnitDef,
   placeBenchUnit,
+  refundForUnit,
+  rerollShop,
   sellUnit,
   startCombat,
   stepRunCombat,
@@ -144,8 +148,13 @@ function renderControls(runState: RunState): void {
     <div class="control-row stats">
       <span>Phase: ${runState.phase}</span>
       <span>Gold: ${runState.gold}</span>
+      <span>HP: ${runState.homeHp}/${runState.homeHpMax}</span>
+      <span>EXP: ${runState.exp}/${expToNextLevel(runState)}</span>
+      <span>Cap: ${boardUnitCap(runState)}</span>
       <span>Wave: ${runState.waveIndex}/${runState.level.waves.length}</span>
       <span>Board: ${runState.board.length}/${boardUnitCap(runState)}</span>
+      <span>Streak: W${runState.winStreak}/L${runState.lossStreak}</span>
+      <span>Income: ${runState.lastIncome.total}g</span>
     </div>
     <div class="control-row shop">
       ${runState.shop
@@ -165,10 +174,21 @@ function renderControls(runState: RunState): void {
         })
         .join("") || "<span class=\"muted\">Bench empty</span>"}
     </div>
+    <div class="control-row board-list">
+      ${runState.board
+        .map((unit) => {
+          const def = getUnitDef(UNIT_DEFS, unit.unitId);
+          const selected = unit.id === state.selectedUnitId ? " selected" : "";
+          return `<button class="${selected}" data-select="${unit.id}" ${runState.phase !== "setup" ? "disabled" : ""}>${def.name}<br><small>${unit.star}* board</small></button>`;
+        })
+        .join("") || "<span class=\"muted\">Board empty</span>"}
+    </div>
     <div class="control-row actions">
       <button data-start ${runState.phase !== "setup" || runState.board.length === 0 ? "disabled" : ""}>Start Combat</button>
+      <button data-reroll ${runState.phase !== "setup" || runState.gold < 2 ? "disabled" : ""}>Reroll<br><small>2g</small></button>
+      <button data-exp ${runState.phase !== "setup" || runState.gold < 4 || runState.playerLevel >= 9 ? "disabled" : ""}>Buy EXP<br><small>4g -> +4</small></button>
       <button data-bench ${!selectedUnit || !selectedUnit.tile || runState.phase !== "setup" ? "disabled" : ""}>Bench</button>
-      <button data-sell ${!selectedUnit || runState.phase !== "setup" ? "disabled" : ""}>Sell</button>
+      <button data-sell ${!selectedUnit || runState.phase !== "setup" ? "disabled" : ""}>Sell${selectedUnit ? `<br><small>+${refundForUnit(getUnitDef(UNIT_DEFS, selectedUnit.unitId).cost, selectedUnit.star)}g</small>` : ""}</button>
       <span class="message">${state.message}</span>
     </div>
   `;
@@ -180,6 +200,22 @@ function renderControls(runState: RunState): void {
       renderControls(runState);
     };
   });
+  controls.querySelector<HTMLButtonElement>("[data-reroll]")?.addEventListener(
+    "click",
+    () => {
+      const result = rerollShop(runState, UNIT_DEFS);
+      state.message = result.ok ? "Shop rerolled." : (result.error ?? "Reroll failed.");
+      renderControls(runState);
+    },
+  );
+  controls.querySelector<HTMLButtonElement>("[data-exp]")?.addEventListener(
+    "click",
+    () => {
+      const result = buyExperience(runState);
+      state.message = result.ok ? "EXP bought." : (result.error ?? "EXP failed.");
+      renderControls(runState);
+    },
+  );
   controls
     .querySelectorAll<HTMLButtonElement>("[data-select]")
     .forEach((button) => {
