@@ -1,0 +1,16 @@
+{
+  "output_dir": "docs/wiki",
+  "include_globs": [],
+  "exclude_globs": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/target/**",
+    "**/vendor/**",
+    "**/.git/**",
+    "**/__pycache__/**",
+    "**/*.lock"
+  ],
+  "repo_notes": [],
+  "pages": []
+}

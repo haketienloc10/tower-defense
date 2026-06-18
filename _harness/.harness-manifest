@@ -1,0 +1,57 @@
+# Harness manifest — sinh tự động bởi install.sh, KHÔNG sửa tay.
+# Sự hiện diện của file này = repo CÀI Harness (không phải repo nguồn).
+source = haketienloc10/repo-harness
+ref = main
+
+[files]
+.agents/skills/deepwiki/SKILL.md
+.agents/skills/deepwiki/wiki.json
+.agents/skills/knowledge-index/SKILL.md
+.editorconfig
+.prettierignore
+.prettierrc
+_harness/00-AGENTS.md
+_harness/01-WORKFLOW.md
+_harness/02-STANDARDS.md
+_harness/03-CLI_REFERENCE.md
+_harness/04-SKILLS.md
+_harness/bin/harness-cli
+_harness/docs/ARCHITECTURE.md
+_harness/docs/CLI_REFERENCE.md
+_harness/docs/CONTEXT_RULES.md
+_harness/docs/FEATURE_INTAKE.md
+_harness/docs/GLOSSARY.md
+_harness/docs/HARNESS.md
+_harness/docs/HARNESS_AUDIT.md
+_harness/docs/HARNESS_BACKLOG.md
+_harness/docs/HARNESS_COMPONENTS.md
+_harness/docs/HARNESS_MATURITY.md
+_harness/docs/IMPROVEMENT_PROTOCOL.md
+_harness/docs/README.md
+_harness/docs/TOOL_REGISTRY.md
+_harness/docs/TRACE_SPEC.md
+_harness/docs/scripts-README.md
+_harness/docs/templates/decision.md
+_harness/docs/templates/high-risk-story/design.md
+_harness/docs/templates/high-risk-story/execplan.md
+_harness/docs/templates/high-risk-story/overview.md
+_harness/docs/templates/high-risk-story/validation.md
+_harness/docs/templates/spec-intake.md
+_harness/docs/templates/story.md
+_harness/docs/templates/validation-report.md
+_harness/schema/001-init.sql
+_harness/schema/002-story-verify.sql
+_harness/schema/003-tool-registry.sql
+_harness/schema/004-intervention.sql
+_harness/schema/005-tool-extensions.sql
+_harness/schema/006-next-action.sql
+_harness/schema/007-evidence.sql
+_harness/skills/_TEMPLATE.md
+_harness/skills/generate-knowledge-index.md
+_harness/skills/quality-gate-review.md
+_harness/skills/tdd-red-green.md
+docs/decisions/README.md
+docs/product/README.md
+docs/stories/README.md
+docs/stories/backlog.md
+docs/stories/epics/README.md
