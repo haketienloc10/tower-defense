@@ -3,12 +3,14 @@ import type { UnitDef, UnitCost, TraitId } from "../data/types";
 
 export interface BoardActor {
   id: string;
+  team: "ally" | "enemy";
   unitId: string;
   name: string;
   cost: UnitCost;
   traits: readonly TraitId[];
   tile: GridCoord;
   color: string;
+  hpRatio?: number;
 }
 
 const PREVIEW_SLOTS: readonly { unitId: string; tile: GridCoord }[] = [
@@ -28,6 +30,7 @@ export function createStaticBoardActors(
 
     return {
       id: `preview-${def.id}`,
+      team: "ally",
       unitId: def.id,
       name: def.name,
       cost: def.cost,

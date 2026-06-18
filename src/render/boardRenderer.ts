@@ -10,6 +10,20 @@ export interface BoardRenderState {
   seed: number;
   levelName: string;
   actors: readonly BoardActor[];
+  combat: {
+    waveIndex: number;
+    aliveEnemies: number;
+    defeatedEnemies: number;
+    leakedEnemies: number;
+    waveEnded: boolean;
+  };
+  run?: {
+    phase: string;
+    gold: number;
+    playerLevel: number;
+    boardCount: number;
+    boardCap: number;
+  };
 }
 
 const TILE_FILL = "#253241";
@@ -118,26 +132,40 @@ function drawActor(
   ctx.fillStyle = actor.color;
   ctx.strokeStyle = "#111820";
   ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, -52);
-  ctx.lineTo(18, -32);
-  ctx.lineTo(14, -8);
-  ctx.lineTo(-14, -8);
-  ctx.lineTo(-18, -32);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
+  if (actor.team === "enemy") {
+    ctx.beginPath();
+    ctx.arc(0, -22, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(0, -52);
+    ctx.lineTo(18, -32);
+    ctx.lineTo(14, -8);
+    ctx.lineTo(-14, -8);
+    ctx.lineTo(-18, -32);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  if (actor.hpRatio !== undefined) {
+    ctx.fillStyle = "#111820";
+    ctx.fillRect(-18, -48, 36, 5);
+    ctx.fillStyle = actor.team === "enemy" ? "#ff6b6b" : "#7adf8f";
+    ctx.fillRect(-18, -48, 36 * actor.hpRatio, 5);
+  }
 
   ctx.fillStyle = "#ffffff";
   ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, monospace";
   ctx.textAlign = "center";
-  ctx.fillText(String(actor.cost), 0, -25);
+  ctx.fillText(actor.team === "enemy" ? "!" : String(actor.cost), 0, -25);
   ctx.restore();
 }
 
 function drawHud(ctx: CanvasRenderingContext2D, state: BoardRenderState): void {
   ctx.fillStyle = "rgba(8, 12, 16, 0.72)";
-  ctx.fillRect(16, 16, 336, 126);
+  ctx.fillRect(16, 16, 400, 216);
   ctx.fillStyle = "#eff8f5";
   ctx.font = "14px ui-monospace, SFMono-Regular, Menlo, monospace";
   ctx.fillText(`seed: ${state.seed}`, 32, 42);
@@ -147,5 +175,31 @@ function drawHud(ctx: CanvasRenderingContext2D, state: BoardRenderState): void {
     : "none";
   ctx.fillText(`selected: ${selected}`, 32, 90);
   ctx.fillText(`level: ${state.levelName}`, 32, 114);
-  ctx.fillText(`M1 data/render: ${state.actors.length} units`, 32, 134);
+  const allyCount = state.actors.filter(
+    (actor) => actor.team === "ally",
+  ).length;
+  ctx.fillText(`M1 data/render: ${allyCount} units`, 32, 134);
+  ctx.fillText(`wave: ${state.combat.waveIndex}`, 32, 158);
+  ctx.fillText(
+    `M2 combat: alive ${state.combat.aliveEnemies} / defeated ${state.combat.defeatedEnemies}`,
+    32,
+    178,
+  );
+  ctx.fillText(
+    `leaked: ${state.combat.leakedEnemies} / ended: ${state.combat.waveEnded}`,
+    32,
+    198,
+  );
+  if (state.run) {
+    ctx.fillText(
+      `M3 ${state.run.phase}: gold ${state.run.gold} / level ${state.run.playerLevel}`,
+      32,
+      218,
+    );
+    ctx.fillText(
+      `board: ${state.run.boardCount}/${state.run.boardCap}`,
+      32,
+      238,
+    );
+  }
 }

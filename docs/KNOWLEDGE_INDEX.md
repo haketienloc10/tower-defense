@@ -14,7 +14,10 @@ Repository này dùng để xây dựng game Auto-battler Tower Defense theo
 `docs/TECHNICAL_SPEC.md`. Hiện repo đã có nền M0 bằng TypeScript/Vite/Canvas và
 M1 render/data: fixed-step loop, seeded RNG, isometric grid, click-to-tile
 selection, typed content data, static unit placement và deterministic depth
-sorting.
+sorting. M2 combat lõi đã có pure simulation cho enemy spawn, flow-field
+movement, nearest-target attacks, armor mitigation, enemy death và HUD combat
+progress. M3 thêm run state setup/combat/result, deterministic shop,
+buy/place/sell từ shop và bench, cùng browser controls để chơi qua một wave.
 
 <!-- KNOWLEDGE:PURPOSE:END -->
 
@@ -60,11 +63,12 @@ sorting.
 - `src/core/` — Core engine utilities thuần như fixed-step loop và seeded RNG.
 - `src/data/` — Typed JSON-style gameplay definitions for units, traits, enemies
   and the first level.
-- `src/math/` — Math helpers cho coordinate conversion và grid bounds.
+- `src/math/` — Math helpers cho coordinate conversion, grid bounds và
+  flow-field pathing.
 - `src/platform/` — Browser/platform wiring như canvas setup và resize.
 - `src/render/` — Canvas 2D rendering cho board, tiles và HUD.
-- `src/sim/` — Pure simulation-facing helpers such as static board actor
-  creation.
+- `src/sim/` — Pure simulation-facing helpers for static board actor creation,
+  M2 combat world updates, and M3 run/shop state.
 
 ## Key Concepts
 

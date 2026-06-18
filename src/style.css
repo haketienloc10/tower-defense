@@ -25,3 +25,57 @@ canvas {
   height: 100vh;
   cursor: crosshair;
 }
+
+.hud-controls {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(122, 215, 199, 0.35);
+  background: rgba(8, 12, 16, 0.84);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  color: #eff8f5;
+  font:
+    13px ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+
+.control-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.stats span,
+.message,
+.muted {
+  color: #c9d8d3;
+}
+
+button {
+  min-width: 112px;
+  min-height: 44px;
+  border: 1px solid rgba(122, 215, 199, 0.5);
+  border-radius: 6px;
+  background: #19313a;
+  color: #eff8f5;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled),
+button.selected {
+  border-color: #f8d66d;
+  background: #274554;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

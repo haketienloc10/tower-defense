@@ -29,6 +29,7 @@ describe("board actor depth sorting", () => {
 function actor(id: string, gx: number, gy: number): BoardActor {
   return {
     id,
+    team: "ally",
     unitId: id,
     name: id,
     cost: 1,
