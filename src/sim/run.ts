@@ -1,5 +1,5 @@
 import { Rng } from "../core/rng";
-import type { EnemyDef, LevelDef, UnitCost, UnitDef } from "../data/types";
+import type { EnemyDef, ItemDef, ItemRecipe, LevelDef, UnitCost, UnitDef } from "../data/types";
 import type { GridCoord } from "../math/iso";
 import { isInsideGrid } from "../math/iso";
 import {
@@ -8,6 +8,14 @@ import {
   type CombatWorld,
 } from "./combat";
 import type { BoardActor } from "./staticBoard";
+import {
+  computeActiveSynergies,
+  mergeAllyBuffs,
+  assassinCritBonus,
+  frostFreezeParams,
+  type ActiveSynergy,
+} from "./synergy";
+import { TRAIT_DEFS } from "../data/gameData";
 
 export type RunPhase = "setup" | "combat" | "result";
 export type RunResult = "victory" | "defeat" | null;
@@ -17,6 +25,8 @@ export interface UnitInstance {
   unitId: string;
   star: 1 | 2 | 3;
   tile: GridCoord | null;
+  /** Item ids equipped (max 3) */
+  items: string[];
 }
 
 export interface ShopSlot {
@@ -42,6 +52,10 @@ export interface RunState {
   shop: (ShopSlot | null)[];
   combatWorld: CombatWorld | null;
   result: RunResult;
+  /** Items in the player's item bag (not equipped to any unit) */
+  itemBag: string[];
+  /** Most recently computed synergies (updated on board change) */
+  activeSynergies: ActiveSynergy[];
   privateState: {
     nextUnitId: number;
     shopRng: Rng;
@@ -51,6 +65,8 @@ export interface RunState {
 export interface RunContent {
   units: readonly UnitDef[];
   enemies: readonly EnemyDef[];
+  items: readonly ItemDef[];
+  recipes: readonly ItemRecipe[];
 }
 
 export interface RunActionResult {
@@ -174,6 +190,8 @@ export function createRunState(
     shop: Array.from({ length: SHOP_SIZE }, () => null),
     combatWorld: null,
     result: null,
+    itemBag: [],
+    activeSynergies: [],
     privateState: {
       nextUnitId: 1,
       shopRng: new Rng(seed ^ 0x51f15e),
@@ -221,6 +239,7 @@ export function buyShopUnit(
     unitId: slot.unitId,
     star: 1,
     tile: null,
+    items: [],
   });
   autoMergeUnits(state);
   return { ok: true };
@@ -285,6 +304,8 @@ export function sellUnit(
   if (!unit) return fail("unit not found");
   const def = getUnitDef(unitDefs, unit.unitId);
   state.gold += refundForUnit(def.cost, unit.star);
+  // Return all equipped items to item bag
+  state.itemBag.push(...unit.items);
   return { ok: true };
 }
 
@@ -294,6 +315,13 @@ export function startCombat(
 ): RunActionResult {
   if (state.phase !== "setup") return fail("combat already started");
   if (state.board.length === 0) return fail("place at least one unit");
+
+  // Compute synergy buffs for this combat
+  const synergies = computeActiveSynergies(state.board, content.units, TRAIT_DEFS as Parameters<typeof computeActiveSynergies>[2]);
+  const allyBuff = mergeAllyBuffs(synergies);
+  const assassin = assassinCritBonus(synergies);
+  const frost = frostFreezeParams(synergies);
+
   state.combatWorld = createCombatWorld({
     level: state.level,
     waveIndex: state.waveIndex,
@@ -308,6 +336,10 @@ export function startCombat(
         tile: unit.tile,
       };
     }),
+    allyBuff,
+    assassinBonus: assassin,
+    frostParams: frost,
+    rngSeed: state.seed ^ state.waveIndex,
   });
   state.phase = "combat";
   return { ok: true };
@@ -340,6 +372,71 @@ export function stepRunCombat(
   state.lastIncome = calculateWaveIncome(state, cleanWave);
   state.gold += state.lastIncome.total;
   rollShop(state, content.units);
+}
+
+// ---------------------------------------------------------------------------
+// Items & Synergy Helpers
+// ---------------------------------------------------------------------------
+
+export function grantItem(state: RunState, itemId: string): void {
+  state.itemBag.push(itemId);
+}
+
+export function craftItem(
+  state: RunState,
+  recipeId: string,
+  content: RunContent,
+): RunActionResult {
+  if (state.phase !== "setup") return fail("crafting is locked during combat");
+  const recipe = content.recipes.find((r) => r.result === recipeId);
+  if (!recipe) return fail("recipe not found");
+
+  const bagCounter = new Map<string, number>();
+  for (const item of state.itemBag) {
+    bagCounter.set(item, (bagCounter.get(item) ?? 0) + 1);
+  }
+
+  const reqCounter = new Map<string, number>();
+  for (const req of recipe.inputs) {
+    reqCounter.set(req, (reqCounter.get(req) ?? 0) + 1);
+  }
+
+  for (const [req, count] of reqCounter.entries()) {
+    if ((bagCounter.get(req) ?? 0) < count) {
+      return fail(`missing component: ${req}`);
+    }
+  }
+
+  // Consume components
+  for (const req of recipe.inputs) {
+    const idx = state.itemBag.indexOf(req);
+    state.itemBag.splice(idx, 1);
+  }
+
+  // Add completed item
+  state.itemBag.push(recipe.result);
+  return { ok: true };
+}
+
+export function equipItem(
+  state: RunState,
+  unitId: string,
+  itemId: string,
+): RunActionResult {
+  if (state.phase !== "setup") return fail("equipping is locked during combat");
+  const unit =
+    state.board.find((u) => u.id === unitId) ??
+    state.bench.find((u) => u.id === unitId);
+  if (!unit) return fail("unit not found");
+  if (unit.items.length >= 3) return fail("unit cannot hold more items");
+
+  const bagIndex = state.itemBag.indexOf(itemId);
+  if (bagIndex < 0) return fail("item not in bag");
+
+  state.itemBag.splice(bagIndex, 1);
+  unit.items.push(itemId);
+  // Optional: recompute stats if we cached them, but since we compute on startCombat, it's fine.
+  return { ok: true };
 }
 
 export function boardUnitCap(state: RunState): number {
@@ -476,11 +573,19 @@ function autoMergeUnits(state: RunState): void {
       )
       .slice(0, 3);
     const boardHost = consumed.find((unit) => unit.tile);
+
+    // Merge items
+    const allItems = consumed.flatMap((unit) => unit.items);
+    const keepItems = allItems.slice(0, 3);
+    const overflowItems = allItems.slice(3);
+    state.itemBag.push(...overflowItems);
+
     const mergedUnit: UnitInstance = {
       id: nextUnitInstanceId(state),
       unitId: match.unitId,
       star: (match.star + 1) as 2 | 3,
       tile: boardHost?.tile ?? null,
+      items: keepItems,
     };
     const consumedIds = new Set(consumed.map((unit) => unit.id));
     state.board = state.board.filter((unit) => !consumedIds.has(unit.id));

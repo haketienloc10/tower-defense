@@ -1,4 +1,4 @@
-import type { EnemyDef, LevelDef, TraitDef, UnitDef } from "./types";
+import type { EnemyDef, ItemDef, ItemRecipe, LevelDef, TraitDef, UnitDef } from "./types";
 
 export const UNIT_DEFS = [
   unit("iron-guard", "Vệ Binh Sắt", 1, "Tanker", ["fighter", "tech"], {
@@ -116,36 +116,113 @@ export const TRAIT_DEFS = [
     id: "fighter",
     name: "Đấu Sĩ",
     breakpoints: [
-      { count: 2, summary: "Toàn đội +15% HP tối đa, +10 Giáp" },
-      { count: 4, summary: "Toàn đội +30% HP tối đa, +25 Giáp" },
-      { count: 6, summary: "Toàn đội +50% HP, +45 Giáp, giảm 15% sát thương nhận" },
+      {
+        count: 2,
+        summary: "Toàn đội +15% HP tối đa, +10 Giáp",
+        effect: { hpPct: 0.15, armorFlat: 10 },
+      },
+      {
+        count: 4,
+        summary: "Toàn đội +30% HP tối đa, +25 Giáp",
+        effect: { hpPct: 0.30, armorFlat: 25 },
+      },
+      {
+        count: 6,
+        summary: "Toàn đội +50% HP, +45 Giáp, giảm 15% sát thương nhận",
+        effect: { hpPct: 0.50, armorFlat: 45, dmgReductionPct: 0.15 },
+      },
     ],
   },
   {
     id: "assassin",
     name: "Sát Thủ",
     breakpoints: [
-      { count: 3, summary: "Sát Thủ +25% tỉ lệ chí mạng; nhảy sau lưng quái" },
-      { count: 6, summary: "+50% chí mạng, +40% sát thương chí mạng" },
+      {
+        count: 3,
+        summary: "Sát Thủ +25% tỉ lệ chí mạng; nhảy sau lưng quái",
+        effect: { critChancePct: 0.25 },
+      },
+      {
+        count: 6,
+        summary: "+50% chí mạng, +40% sát thương chí mạng",
+        effect: { critChancePct: 0.50, critDmgBonusPct: 0.40 },
+      },
     ],
   },
   {
     id: "frost",
     name: "Băng Giá",
     breakpoints: [
-      { count: 3, summary: "Đòn đánh toàn đội có 20% đóng băng 1.5s" },
-      { count: 5, summary: "35% đóng băng 2s; quái bị đóng băng nhận +15% sát thương" },
+      {
+        count: 3,
+        summary: "Đòn đánh toàn đội có 20% đóng băng 1.5s",
+        effect: { freezeChancePct: 0.20, freezeDurationS: 1.5 },
+      },
+      {
+        count: 5,
+        summary: "35% đóng băng 2s; quái bị đóng băng nhận +15% sát thương",
+        effect: { freezeChancePct: 0.35, freezeDurationS: 2.0, frozenDmgBonusPct: 0.15 },
+      },
     ],
   },
   {
     id: "tech",
     name: "Công Nghệ",
     breakpoints: [
-      { count: 2, summary: "Nhà Chính hồi 1% HP/giây và bắn laser mỗi 3s" },
-      { count: 4, summary: "Nhà Chính hồi 2% HP/giây; laser mỗi 2s, 2 mục tiêu" },
+      {
+        count: 2,
+        summary: "Nhà Chính hồi 1% HP/giây và bắn laser mỗi 3s",
+        effect: { homeHealRatePct: 0.01, homeLaserIntervalS: 3, homeLaserDmg: 150, homeLaserTargets: 1 },
+      },
+      {
+        count: 4,
+        summary: "Nhà Chính hồi 2% HP/giây; laser mỗi 2s, 2 mục tiêu",
+        effect: { homeHealRatePct: 0.02, homeLaserIntervalS: 2, homeLaserDmg: 300, homeLaserTargets: 2 },
+      },
     ],
   },
 ] as const satisfies readonly TraitDef[];
+
+// ---------------------------------------------------------------------------
+// Item components (6 mảnh cơ bản) + completed items (3 MVP)
+// ---------------------------------------------------------------------------
+export const ITEM_DEFS: readonly ItemDef[] = [
+  // Components
+  { id: "bf-sword",    name: "Kiếm B.F",    tier: "component", stats: { atk: 15 } },
+  { id: "recurve-bow", name: "Cung Gỗ",     tier: "component", stats: { atkSpeedPct: 0.12 } },
+  { id: "chain-vest",  name: "Giáp Lưới",   tier: "component", stats: { armor: 20 } },
+  { id: "giant-belt",  name: "Đai Máu",     tier: "component", stats: { hp: 150 } },
+  { id: "tear",        name: "Nước Mắt",    tier: "component", stats: { energyStart: 15 } },
+  { id: "needlessly",  name: "Gậy Phép",    tier: "component", stats: { apPct: 0.20 } },
+  // Completed items (3 MVP)
+  {
+    id: "rageblade",
+    name: "Cuồng Đao",
+    tier: "completed",
+    stats: { atk: 15, atkSpeedPct: 0.12 },
+    effectDescription: "Mỗi đòn +5% tốc đánh (cộng dồn tối đa 6 lần)",
+  },
+  {
+    id: "thornmail",
+    name: "Áo Choàng Gai",
+    tier: "completed",
+    stats: { armor: 20, hp: 150 },
+    effectDescription: "Phản 15% sát thương vật lý nhận về kẻ đánh",
+  },
+  {
+    id: "seraphs",
+    name: "Trượng Thiên Sứ",
+    tier: "completed",
+    stats: { apPct: 0.20, energyStart: 15 },
+    effectDescription: "Hồi thêm 15 năng lượng mỗi đòn đánh ra",
+  },
+];
+
+export const ITEM_RECIPES: readonly ItemRecipe[] = [
+  { result: "rageblade",  inputs: ["bf-sword",   "recurve-bow"] },
+  { result: "thornmail",  inputs: ["chain-vest",  "giant-belt"]  },
+  { result: "seraphs",    inputs: ["tear",        "needlessly"]  },
+];
 
 export const ENEMY_DEFS = [
   enemy("slime", "Slime Con", "walker", 250, 20, 0, 0.85, 1, 1),
