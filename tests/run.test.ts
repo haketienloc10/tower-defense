@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { CHAPTER_1_LEVEL, ENEMY_DEFS, UNIT_DEFS } from "../src/data/gameData";
+import {
+  CHAPTER_1_LEVEL,
+  ENEMY_DEFS,
+  ITEM_DEFS,
+  ITEM_RECIPES,
+  UNIT_DEFS,
+} from "../src/data/gameData";
 import {
   benchBoardUnit,
   boardUnitCap,
   buyShopUnit,
   buyExperience,
+  calculateStars,
   calculateInterest,
   calculateStreakBonus,
   calculateWaveIncome,
@@ -18,7 +25,12 @@ import {
   stepRunCombat,
 } from "../src/sim/run";
 
-const CONTENT = { units: UNIT_DEFS, enemies: ENEMY_DEFS };
+const CONTENT = {
+  units: UNIT_DEFS,
+  enemies: ENEMY_DEFS,
+  items: ITEM_DEFS,
+  recipes: ITEM_RECIPES,
+};
 
 describe("M3 run state", () => {
   it("starts in setup with prep gold and deterministic shop slots", () => {
@@ -62,7 +74,9 @@ describe("M3 run state", () => {
     const first = state.bench[0].id;
     const second = state.bench[1].id;
 
-    expect(placeBenchUnit(state, first, { gx: 4, gy: 4 })).toEqual({ ok: true });
+    expect(placeBenchUnit(state, first, { gx: 4, gy: 4 })).toEqual({
+      ok: true,
+    });
     expect(placeBenchUnit(state, second, { gx: 4, gy: 4 })).toEqual({
       ok: false,
       error: "tile is occupied",
@@ -167,10 +181,16 @@ describe("M4 economy and star progression", () => {
     const state = createRunState(505, CHAPTER_1_LEVEL, CONTENT);
     state.playerLevel = 1;
     state.bench = [
-      { id: "unit-a", unitId: "iron-guard", star: 1, tile: null },
-      { id: "unit-b", unitId: "trainee-archer", star: 1, tile: null },
-      { id: "unit-c", unitId: "dagger", star: 1, tile: null },
-      { id: "unit-d", unitId: "frost-knight", star: 1, tile: null },
+      { id: "unit-a", unitId: "iron-guard", star: 1, tile: null, items: [] },
+      {
+        id: "unit-b",
+        unitId: "trainee-archer",
+        star: 1,
+        tile: null,
+        items: [],
+      },
+      { id: "unit-c", unitId: "dagger", star: 1, tile: null, items: [] },
+      { id: "unit-d", unitId: "frost-knight", star: 1, tile: null, items: [] },
     ];
 
     expect(placeBenchUnit(state, "unit-a", { gx: 2, gy: 2 })).toEqual({
@@ -197,6 +217,7 @@ describe("M4 economy and star progression", () => {
         unitId: "mecha-general",
         star: 3,
         tile: { gx: 5, gy: 4 },
+        items: [],
       },
     ];
 
@@ -220,5 +241,43 @@ describe("M4 economy and star progression", () => {
       total: 8,
     });
     expect(state.gold).toBe(28);
+  });
+
+  it("computes M6 final victory stars after the final Chapter 1 wave", () => {
+    const state = createRunState(507, CHAPTER_1_LEVEL, CONTENT);
+    state.waveIndex = 10;
+    state.homeHp = 24;
+    state.board = [
+      {
+        id: "unit-carry",
+        unitId: "mecha-general",
+        star: 3,
+        tile: { gx: 5, gy: 4 },
+        items: [],
+      },
+    ];
+
+    expect(startCombat(state, CONTENT)).toEqual({ ok: true });
+    if (!state.combatWorld) throw new Error("expected combat world");
+    state.combatWorld.waveEnded = true;
+    state.combatWorld.leakedEnemyCount = 0;
+    stepRunCombat(state, 100, CONTENT);
+
+    expect(state.phase).toBe("result");
+    expect(state.result).toBe("victory");
+    expect(state.finalResult).toEqual({
+      outcome: "victory",
+      stars: 3,
+      homeHpRemaining: 24,
+      homeHpMax: 30,
+      wavesCompleted: 10,
+    });
+  });
+
+  it("calculates star thresholds from home HP percentage", () => {
+    expect(calculateStars(24, 30, CHAPTER_1_LEVEL.starThresholds)).toBe(3);
+    expect(calculateStars(12, 30, CHAPTER_1_LEVEL.starThresholds)).toBe(2);
+    expect(calculateStars(1, 30, CHAPTER_1_LEVEL.starThresholds)).toBe(1);
+    expect(calculateStars(0, 30, CHAPTER_1_LEVEL.starThresholds)).toBe(0);
   });
 });

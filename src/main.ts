@@ -9,7 +9,14 @@ import {
 } from "./math/iso";
 import { createCanvasApp } from "./platform/canvas";
 import { renderBoard } from "./render/boardRenderer";
-import { CHAPTER_1_LEVEL, ENEMY_DEFS, UNIT_DEFS, ITEM_DEFS, ITEM_RECIPES, TRAIT_DEFS } from "./data/gameData";
+import {
+  CHAPTER_1_LEVEL,
+  ENEMY_DEFS,
+  UNIT_DEFS,
+  ITEM_DEFS,
+  ITEM_RECIPES,
+  TRAIT_DEFS,
+} from "./data/gameData";
 import {
   benchBoardUnit,
   boardUnitCap,
@@ -50,7 +57,12 @@ const projection: IsoProjection = {
 };
 
 const rng = new Rng(SEED);
-const content = { units: UNIT_DEFS, enemies: ENEMY_DEFS, items: ITEM_DEFS, recipes: ITEM_RECIPES };
+const content = {
+  units: UNIT_DEFS,
+  enemies: ENEMY_DEFS,
+  items: ITEM_DEFS,
+  recipes: ITEM_RECIPES,
+};
 const run = createRunState(SEED, CHAPTER_1_LEVEL, content);
 const state = {
   tick: 0,
@@ -74,7 +86,9 @@ ctx.canvas.addEventListener("click", (event) => {
   state.selected = isInsideGrid(grid, GRID_WIDTH, GRID_HEIGHT) ? grid : null;
   if (state.selected && state.selectedUnitId) {
     const result = placeBenchUnit(run, state.selectedUnitId, state.selected);
-    state.message = result.ok ? "Unit placed." : (result.error ?? "Action failed.");
+    state.message = result.ok
+      ? "Unit placed."
+      : (result.error ?? "Action failed.");
     if (result.ok) state.selectedUnitId = null;
   } else if (state.selected) {
     const selectedTile = state.selected;
@@ -128,6 +142,9 @@ const loop = new FixedStepLoop(
         defeatedEnemies: combatWorld?.defeatedEnemyCount ?? 0,
         leakedEnemies: combatWorld?.leakedEnemyCount ?? 0,
         waveEnded: combatWorld?.waveEnded ?? false,
+        telegraphColumns:
+          combatWorld?.bossTelegraphs.map((telegraph) => telegraph.columnGx) ??
+          [],
       },
       run: {
         phase: run.phase,
@@ -150,9 +167,32 @@ function renderControls(runState: RunState): void {
         (unit) => unit.id === state.selectedUnitId,
       )
     : null;
-    
-  const activeSynergies = computeActiveSynergies(runState.board, UNIT_DEFS, TRAIT_DEFS);
-  
+
+  const activeSynergies = computeActiveSynergies(
+    runState.board,
+    UNIT_DEFS,
+    TRAIT_DEFS,
+  );
+  const currentWave = runState.level.waves.find(
+    (wave) => wave.index === runState.waveIndex,
+  );
+  const waveEnemyIds = currentWave?.spawns.map((spawn) => spawn.enemyId) ?? [];
+  const bossNames = ENEMY_DEFS.filter(
+    (enemy) =>
+      waveEnemyIds.includes(enemy.id) && (enemy.isBoss || enemy.isMiniBoss),
+  ).map((enemy) => `${enemy.isBoss ? "Boss" : "Mini-boss"}: ${enemy.name}`);
+  const telegraphText = runState.combatWorld?.bossTelegraphs.length
+    ? runState.combatWorld.bossTelegraphs
+        .map(
+          (telegraph) =>
+            `Column ${telegraph.columnGx} in ${Math.ceil(telegraph.remainingMs)}ms`,
+        )
+        .join(", ")
+    : "None";
+  const finalText = runState.finalResult
+    ? `${runState.finalResult.outcome.toUpperCase()} - ${runState.finalResult.stars} stars (${runState.finalResult.homeHpRemaining}/${runState.finalResult.homeHpMax} HP)`
+    : "In progress";
+
   const html = `
     <div class="control-row stats">
       <span>Phase: ${runState.phase}</span>
@@ -164,14 +204,21 @@ function renderControls(runState: RunState): void {
       <span>Board: ${runState.board.length}/${boardUnitCap(runState)}</span>
       <span>Streak: W${runState.winStreak}/L${runState.lossStreak}</span>
       <span>Income: ${runState.lastIncome.total}g</span>
+      <span>${bossNames.join(" | ") || "Normal wave"}</span>
+      <span>Telegraph: ${telegraphText}</span>
+      <span>Result: ${finalText}</span>
     </div>
     <div class="control-row synergies">
       <strong>Synergies:</strong> 
-      ${activeSynergies.map(s => {
-        const active = s.activeTier ? `(Active: ${s.activeTier.summary})` : "";
-        const next = s.nextTier ? `(Next: ${s.nextTier.count})` : "(Max)";
-        return `[${s.name} ${s.count} ${active} ${next}]`;
-      }).join(" ")}
+      ${activeSynergies
+        .map((s) => {
+          const active = s.activeTier
+            ? `(Active: ${s.activeTier.summary})`
+            : "";
+          const next = s.nextTier ? `(Next: ${s.nextTier.count})` : "(Max)";
+          return `[${s.name} ${s.count} ${active} ${next}]`;
+        })
+        .join(" ")}
     </div>
     <div class="control-row shop">
       ${runState.shop
@@ -183,30 +230,43 @@ function renderControls(runState: RunState): void {
         .join("")}
     </div>
     <div class="control-row bench">
-      ${runState.bench
-        .map((unit) => {
-          const def = getUnitDef(UNIT_DEFS, unit.unitId);
-          const selected = unit.id === state.selectedUnitId ? " selected" : "";
-          return `<button class="${selected}" data-select="${unit.id}" ${runState.phase !== "setup" ? "disabled" : ""}>${def.name}<br><small>${unit.star}* bench</small></button>`;
-        })
-        .join("") || "<span class=\"muted\">Bench empty</span>"}
+      ${
+        runState.bench
+          .map((unit) => {
+            const def = getUnitDef(UNIT_DEFS, unit.unitId);
+            const selected =
+              unit.id === state.selectedUnitId ? " selected" : "";
+            return `<button class="${selected}" data-select="${unit.id}" ${runState.phase !== "setup" ? "disabled" : ""}>${def.name}<br><small>${unit.star}* bench</small></button>`;
+          })
+          .join("") || '<span class="muted">Bench empty</span>'
+      }
     </div>
     <div class="control-row board-list">
-      ${runState.board
-        .map((unit) => {
-          const def = getUnitDef(UNIT_DEFS, unit.unitId);
-          const selected = unit.id === state.selectedUnitId ? " selected" : "";
-          const itemsText = unit.items.length > 0 ? ` [${unit.items.join(",")}]` : "";
-          return `<button class="${selected}" data-select="${unit.id}" ${runState.phase !== "setup" ? "disabled" : ""}>${def.name}<br><small>${unit.star}* board</small>${itemsText}</button>`;
-        })
-        .join("") || "<span class=\"muted\">Board empty</span>"}
+      ${
+        runState.board
+          .map((unit) => {
+            const def = getUnitDef(UNIT_DEFS, unit.unitId);
+            const selected =
+              unit.id === state.selectedUnitId ? " selected" : "";
+            const itemsText =
+              unit.items.length > 0 ? ` [${unit.items.join(",")}]` : "";
+            return `<button class="${selected}" data-select="${unit.id}" ${runState.phase !== "setup" ? "disabled" : ""}>${def.name}<br><small>${unit.star}* board</small>${itemsText}</button>`;
+          })
+          .join("") || '<span class="muted">Board empty</span>'
+      }
     </div>
     <div class="control-row items">
       <strong>Item Bag:</strong>
-      ${runState.itemBag.length === 0 ? "Empty" : runState.itemBag.map((itemId, idx) => {
-        const itemDef = ITEM_DEFS.find(i => i.id === itemId);
-        return `<button data-equip="${itemId}" ${!selectedUnit || runState.phase !== "setup" ? "disabled" : ""} title="Click to equip to selected unit">${itemDef?.name}</button>`;
-      }).join(" ")}
+      ${
+        runState.itemBag.length === 0
+          ? "Empty"
+          : runState.itemBag
+              .map((itemId, idx) => {
+                const itemDef = ITEM_DEFS.find((i) => i.id === itemId);
+                return `<button data-equip="${itemId}" ${!selectedUnit || runState.phase !== "setup" ? "disabled" : ""} title="Click to equip to selected unit">${itemDef?.name}</button>`;
+              })
+              .join(" ")
+      }
       <br>
       <button data-grant-item ${runState.phase !== "setup" ? "disabled" : ""}>+ Random Component</button>
       <button data-craft="rageblade" ${runState.phase !== "setup" ? "disabled" : ""}>Craft Rageblade</button>
@@ -227,29 +287,35 @@ function renderControls(runState: RunState): void {
   lastControlsHtml = html;
   controls.innerHTML = html;
 
-  controls.querySelectorAll<HTMLButtonElement>("[data-buy]").forEach((button) => {
-    button.onclick = () => {
-      const result = buyShopUnit(runState, Number(button.dataset.buy));
-      state.message = result.ok ? "Unit bought to bench." : (result.error ?? "Buy failed.");
-      renderControls(runState);
-    };
-  });
-  controls.querySelector<HTMLButtonElement>("[data-reroll]")?.addEventListener(
-    "click",
-    () => {
+  controls
+    .querySelectorAll<HTMLButtonElement>("[data-buy]")
+    .forEach((button) => {
+      button.onclick = () => {
+        const result = buyShopUnit(runState, Number(button.dataset.buy));
+        state.message = result.ok
+          ? "Unit bought to bench."
+          : (result.error ?? "Buy failed.");
+        renderControls(runState);
+      };
+    });
+  controls
+    .querySelector<HTMLButtonElement>("[data-reroll]")
+    ?.addEventListener("click", () => {
       const result = rerollShop(runState, UNIT_DEFS);
-      state.message = result.ok ? "Shop rerolled." : (result.error ?? "Reroll failed.");
+      state.message = result.ok
+        ? "Shop rerolled."
+        : (result.error ?? "Reroll failed.");
       renderControls(runState);
-    },
-  );
-  controls.querySelector<HTMLButtonElement>("[data-exp]")?.addEventListener(
-    "click",
-    () => {
+    });
+  controls
+    .querySelector<HTMLButtonElement>("[data-exp]")
+    ?.addEventListener("click", () => {
       const result = buyExperience(runState);
-      state.message = result.ok ? "EXP bought." : (result.error ?? "EXP failed.");
+      state.message = result.ok
+        ? "EXP bought."
+        : (result.error ?? "EXP failed.");
       renderControls(runState);
-    },
-  );
+    });
   controls
     .querySelectorAll<HTMLButtonElement>("[data-select]")
     .forEach((button) => {
@@ -259,60 +325,73 @@ function renderControls(runState: RunState): void {
         renderControls(runState);
       };
     });
-  controls.querySelector<HTMLButtonElement>("[data-start]")?.addEventListener(
-    "click",
-    () => {
+  controls
+    .querySelector<HTMLButtonElement>("[data-start]")
+    ?.addEventListener("click", () => {
       const result = startCombat(runState, content);
-      state.message = result.ok ? "Combat started." : (result.error ?? "Start failed.");
+      state.message = result.ok
+        ? "Combat started."
+        : (result.error ?? "Start failed.");
       state.selectedUnitId = null;
       renderControls(runState);
-    },
-  );
-  controls.querySelector<HTMLButtonElement>("[data-bench]")?.addEventListener(
-    "click",
-    () => {
+    });
+  controls
+    .querySelector<HTMLButtonElement>("[data-bench]")
+    ?.addEventListener("click", () => {
       if (!state.selectedUnitId) return;
       const result = benchBoardUnit(runState, state.selectedUnitId);
-      state.message = result.ok ? "Unit moved to bench." : (result.error ?? "Bench failed.");
+      state.message = result.ok
+        ? "Unit moved to bench."
+        : (result.error ?? "Bench failed.");
       state.selectedUnitId = null;
       renderControls(runState);
-    },
-  );
-  controls.querySelector<HTMLButtonElement>("[data-sell]")?.addEventListener(
-    "click",
-    () => {
+    });
+  controls
+    .querySelector<HTMLButtonElement>("[data-sell]")
+    ?.addEventListener("click", () => {
       if (!state.selectedUnitId) return;
       const result = sellUnit(runState, state.selectedUnitId, UNIT_DEFS);
-      state.message = result.ok ? "Unit sold." : (result.error ?? "Sell failed.");
+      state.message = result.ok
+        ? "Unit sold."
+        : (result.error ?? "Sell failed.");
       state.selectedUnitId = null;
       renderControls(runState);
-    },
-  );
-  
-  controls.querySelector<HTMLButtonElement>("[data-grant-item]")?.addEventListener("click", () => {
-    const components = ITEM_DEFS.filter(i => i.tier === "component");
-    const item = components[rng.int(components.length)];
-    grantItem(runState, item.id);
-    state.message = `Granted ${item.name}.`;
-    renderControls(runState);
-  });
-  
-  controls.querySelectorAll<HTMLButtonElement>("[data-craft]").forEach((button) => {
-    button.onclick = () => {
-      const recipeId = button.dataset.craft!;
-      const result = craftItem(runState, recipeId, content);
-      state.message = result.ok ? `Crafted ${recipeId}.` : (result.error ?? "Craft failed.");
+    });
+
+  controls
+    .querySelector<HTMLButtonElement>("[data-grant-item]")
+    ?.addEventListener("click", () => {
+      const components = ITEM_DEFS.filter((i) => i.tier === "component");
+      const item = components[rng.int(components.length)];
+      grantItem(runState, item.id);
+      state.message = `Granted ${item.name}.`;
       renderControls(runState);
-    };
-  });
-  
-  controls.querySelectorAll<HTMLButtonElement>("[data-equip]").forEach((button) => {
-    button.onclick = () => {
-      if (!state.selectedUnitId) return;
-      const itemId = button.dataset.equip!;
-      const result = equipItem(runState, state.selectedUnitId, itemId);
-      state.message = result.ok ? `Equipped ${itemId}.` : (result.error ?? "Equip failed.");
-      renderControls(runState);
-    };
-  });
+    });
+
+  controls
+    .querySelectorAll<HTMLButtonElement>("[data-craft]")
+    .forEach((button) => {
+      button.onclick = () => {
+        const recipeId = button.dataset.craft!;
+        const result = craftItem(runState, recipeId, content);
+        state.message = result.ok
+          ? `Crafted ${recipeId}.`
+          : (result.error ?? "Craft failed.");
+        renderControls(runState);
+      };
+    });
+
+  controls
+    .querySelectorAll<HTMLButtonElement>("[data-equip]")
+    .forEach((button) => {
+      button.onclick = () => {
+        if (!state.selectedUnitId) return;
+        const itemId = button.dataset.equip!;
+        const result = equipItem(runState, state.selectedUnitId, itemId);
+        state.message = result.ok
+          ? `Equipped ${itemId}.`
+          : (result.error ?? "Equip failed.");
+        renderControls(runState);
+      };
+    });
 }

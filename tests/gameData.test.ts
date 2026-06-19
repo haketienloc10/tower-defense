@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { CHAPTER_1_LEVEL, TRAIT_DEFS, UNIT_DEFS } from "../src/data/gameData";
+import {
+  CHAPTER_1_LEVEL,
+  ENEMY_DEFS,
+  TRAIT_DEFS,
+  UNIT_DEFS,
+} from "../src/data/gameData";
 import { createStaticBoardActors } from "../src/sim/staticBoard";
 
 describe("M1 game data", () => {
@@ -21,9 +26,9 @@ describe("M1 game data", () => {
     ]);
     expect(UNIT_DEFS.every((unit) => unit.starScaling === 1.8)).toBe(true);
     expect(UNIT_DEFS.every((unit) => unit.baseStats.hp > 0)).toBe(true);
-    expect(UNIT_DEFS.every((unit) => unit.sprite.anchor === "bottom-center")).toBe(
-      true,
-    );
+    expect(
+      UNIT_DEFS.every((unit) => unit.sprite.anchor === "bottom-center"),
+    ).toBe(true);
   });
 
   it("defines the four MVP traits and first level contract", () => {
@@ -43,6 +48,35 @@ describe("M1 game data", () => {
       },
     ]);
     expect(CHAPTER_1_LEVEL.bossWaves).toEqual([5, 10]);
+  });
+
+  it("defines M6 Chapter 1 boss waves with special enemy metadata", () => {
+    expect(CHAPTER_1_LEVEL.waves).toHaveLength(10);
+    expect(
+      CHAPTER_1_LEVEL.waves.find((wave) => wave.index === 5)?.spawns[0],
+    ).toEqual(expect.objectContaining({ enemyId: "slime-king", count: 1 }));
+    expect(
+      CHAPTER_1_LEVEL.waves.find((wave) => wave.index === 10)?.spawns[0],
+    ).toEqual(expect.objectContaining({ enemyId: "mecha-dragon", count: 1 }));
+    expect(ENEMY_DEFS.find((enemy) => enemy.id === "slime-king")).toEqual(
+      expect.objectContaining({
+        isMiniBoss: true,
+        onDeath: expect.objectContaining({
+          type: "split",
+          enemyId: "slime",
+          count: 8,
+        }),
+      }),
+    );
+    expect(ENEMY_DEFS.find((enemy) => enemy.id === "mecha-dragon")).toEqual(
+      expect.objectContaining({
+        isBoss: true,
+        special: expect.objectContaining({
+          type: "column-breath",
+          telegraphMs: 1500,
+        }),
+      }),
+    );
   });
 
   it("creates static board actors from unit definitions", () => {

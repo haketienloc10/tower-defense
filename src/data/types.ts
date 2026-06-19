@@ -100,7 +100,7 @@ export interface TraitDef {
 export interface EnemyDef {
   id: string;
   name: string;
-  behavior: "walker" | "flyer" | "splitter";
+  behavior: "walker" | "flyer" | "splitter" | "boss-dragon";
   stats: {
     hp: number;
     atk: number;
@@ -109,6 +109,21 @@ export interface EnemyDef {
     range: number;
   };
   rewardGold: number;
+  isMiniBoss?: boolean;
+  isBoss?: boolean;
+  hpMultiplier?: number;
+  onDeath?: {
+    type: "split";
+    enemyId: string;
+    count: number;
+    moveSpeedMultiplier: number;
+  };
+  special?: {
+    type: "column-breath";
+    intervalMs: number;
+    telegraphMs: number;
+    damage: number;
+  };
 }
 
 export interface WaveDef {

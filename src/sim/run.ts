@@ -1,12 +1,15 @@
 import { Rng } from "../core/rng";
-import type { EnemyDef, ItemDef, ItemRecipe, LevelDef, UnitCost, UnitDef } from "../data/types";
+import type {
+  EnemyDef,
+  ItemDef,
+  ItemRecipe,
+  LevelDef,
+  UnitCost,
+  UnitDef,
+} from "../data/types";
 import type { GridCoord } from "../math/iso";
 import { isInsideGrid } from "../math/iso";
-import {
-  createCombatWorld,
-  stepCombatWorld,
-  type CombatWorld,
-} from "./combat";
+import { createCombatWorld, stepCombatWorld, type CombatWorld } from "./combat";
 import type { BoardActor } from "./staticBoard";
 import {
   computeActiveSynergies,
@@ -19,6 +22,14 @@ import { TRAIT_DEFS } from "../data/gameData";
 
 export type RunPhase = "setup" | "combat" | "result";
 export type RunResult = "victory" | "defeat" | null;
+
+export interface FinalRunResult {
+  outcome: Exclude<RunResult, null>;
+  stars: 0 | 1 | 2 | 3;
+  homeHpRemaining: number;
+  homeHpMax: number;
+  wavesCompleted: number;
+}
 
 export interface UnitInstance {
   id: string;
@@ -52,6 +63,7 @@ export interface RunState {
   shop: (ShopSlot | null)[];
   combatWorld: CombatWorld | null;
   result: RunResult;
+  finalResult: FinalRunResult | null;
   /** Items in the player's item bag (not equipped to any unit) */
   itemBag: string[];
   /** Most recently computed synergies (updated on board change) */
@@ -114,52 +126,53 @@ const EXP_TO_NEXT_LEVEL: Record<number, number> = {
   9: Number.POSITIVE_INFINITY,
 };
 
-const SHOP_ODDS: Record<number, readonly { cost: UnitCost; weight: number }[]> = {
-  1: [{ cost: 1, weight: 100 }],
-  2: [{ cost: 1, weight: 100 }],
-  3: [
-    { cost: 1, weight: 75 },
-    { cost: 2, weight: 25 },
-  ],
-  4: [
-    { cost: 1, weight: 55 },
-    { cost: 2, weight: 30 },
-    { cost: 3, weight: 15 },
-  ],
-  5: [
-    { cost: 1, weight: 45 },
-    { cost: 2, weight: 33 },
-    { cost: 3, weight: 20 },
-    { cost: 4, weight: 2 },
-  ],
-  6: [
-    { cost: 1, weight: 30 },
-    { cost: 2, weight: 40 },
-    { cost: 3, weight: 25 },
-    { cost: 4, weight: 5 },
-  ],
-  7: [
-    { cost: 1, weight: 19 },
-    { cost: 2, weight: 35 },
-    { cost: 3, weight: 30 },
-    { cost: 4, weight: 14 },
-    { cost: 5, weight: 2 },
-  ],
-  8: [
-    { cost: 1, weight: 18 },
-    { cost: 2, weight: 25 },
-    { cost: 3, weight: 32 },
-    { cost: 4, weight: 20 },
-    { cost: 5, weight: 5 },
-  ],
-  9: [
-    { cost: 1, weight: 10 },
-    { cost: 2, weight: 20 },
-    { cost: 3, weight: 25 },
-    { cost: 4, weight: 35 },
-    { cost: 5, weight: 10 },
-  ],
-};
+const SHOP_ODDS: Record<number, readonly { cost: UnitCost; weight: number }[]> =
+  {
+    1: [{ cost: 1, weight: 100 }],
+    2: [{ cost: 1, weight: 100 }],
+    3: [
+      { cost: 1, weight: 75 },
+      { cost: 2, weight: 25 },
+    ],
+    4: [
+      { cost: 1, weight: 55 },
+      { cost: 2, weight: 30 },
+      { cost: 3, weight: 15 },
+    ],
+    5: [
+      { cost: 1, weight: 45 },
+      { cost: 2, weight: 33 },
+      { cost: 3, weight: 20 },
+      { cost: 4, weight: 2 },
+    ],
+    6: [
+      { cost: 1, weight: 30 },
+      { cost: 2, weight: 40 },
+      { cost: 3, weight: 25 },
+      { cost: 4, weight: 5 },
+    ],
+    7: [
+      { cost: 1, weight: 19 },
+      { cost: 2, weight: 35 },
+      { cost: 3, weight: 30 },
+      { cost: 4, weight: 14 },
+      { cost: 5, weight: 2 },
+    ],
+    8: [
+      { cost: 1, weight: 18 },
+      { cost: 2, weight: 25 },
+      { cost: 3, weight: 32 },
+      { cost: 4, weight: 20 },
+      { cost: 5, weight: 5 },
+    ],
+    9: [
+      { cost: 1, weight: 10 },
+      { cost: 2, weight: 20 },
+      { cost: 3, weight: 25 },
+      { cost: 4, weight: 35 },
+      { cost: 5, weight: 10 },
+    ],
+  };
 
 export function createRunState(
   seed: number,
@@ -190,6 +203,7 @@ export function createRunState(
     shop: Array.from({ length: SHOP_SIZE }, () => null),
     combatWorld: null,
     result: null,
+    finalResult: null,
     itemBag: [],
     activeSynergies: [],
     privateState: {
@@ -201,10 +215,7 @@ export function createRunState(
   return state;
 }
 
-export function rollShop(
-  state: RunState,
-  unitDefs: readonly UnitDef[],
-): void {
+export function rollShop(state: RunState, unitDefs: readonly UnitDef[]): void {
   assertSetup(state);
   state.shop = Array.from({ length: SHOP_SIZE }, () =>
     rollShopSlot(state, unitDefs),
@@ -246,7 +257,8 @@ export function buyShopUnit(
 }
 
 export function buyExperience(state: RunState): RunActionResult {
-  if (state.phase !== "setup") return fail("experience is locked during combat");
+  if (state.phase !== "setup")
+    return fail("experience is locked during combat");
   if (state.playerLevel >= 9) return fail("player level is maxed");
   if (state.gold < BUY_EXP_COST) return fail("not enough gold");
   state.gold -= BUY_EXP_COST;
@@ -317,7 +329,11 @@ export function startCombat(
   if (state.board.length === 0) return fail("place at least one unit");
 
   // Compute synergy buffs for this combat
-  const synergies = computeActiveSynergies(state.board, content.units, TRAIT_DEFS as Parameters<typeof computeActiveSynergies>[2]);
+  const synergies = computeActiveSynergies(
+    state.board,
+    content.units,
+    TRAIT_DEFS as Parameters<typeof computeActiveSynergies>[2],
+  );
   const allyBuff = mergeAllyBuffs(synergies);
   const assassin = assassinCritBonus(synergies);
   const frost = frostFreezeParams(synergies);
@@ -359,11 +375,14 @@ export function stepRunCombat(
   const cleanWave = leakedEnemies === 0;
   updateStreaks(state, cleanWave);
   grantExperience(state, AUTO_EXP_PER_WAVE);
-  const nextWave = state.level.waves.find((wave) => wave.index > state.waveIndex);
+  const nextWave = state.level.waves.find(
+    (wave) => wave.index > state.waveIndex,
+  );
   state.combatWorld = null;
   if (!nextWave || state.homeHp <= 0) {
     state.phase = "result";
     state.result = state.homeHp > 0 ? "victory" : "defeat";
+    state.finalResult = createFinalRunResult(state);
     return;
   }
 
@@ -485,7 +504,10 @@ export function calculateInterest(gold: number): number {
   return Math.min(Math.floor(gold / 10), 5);
 }
 
-export function calculateStreakBonus(winStreak: number, lossStreak: number): number {
+export function calculateStreakBonus(
+  winStreak: number,
+  lossStreak: number,
+): number {
   const streak = Math.max(Math.abs(winStreak), Math.abs(lossStreak));
   if (streak >= 5) return 3;
   if (streak >= 4) return 2;
@@ -509,10 +531,37 @@ export function calculateWaveIncome(
   };
 }
 
-function rollShopSlot(
-  state: RunState,
-  unitDefs: readonly UnitDef[],
-): ShopSlot {
+export function calculateStars(
+  homeHp: number,
+  homeHpMax: number,
+  thresholds: LevelDef["starThresholds"],
+): 0 | 1 | 2 | 3 {
+  if (homeHp <= 0 || homeHpMax <= 0) return 0;
+  const ratio = homeHp / homeHpMax;
+  if (ratio >= thresholds.three) return 3;
+  if (ratio >= thresholds.two) return 2;
+  return 1;
+}
+
+function createFinalRunResult(state: RunState): FinalRunResult {
+  const outcome = state.homeHp > 0 ? "victory" : "defeat";
+  return {
+    outcome,
+    stars:
+      outcome === "victory"
+        ? calculateStars(
+            state.homeHp,
+            state.homeHpMax,
+            state.level.starThresholds,
+          )
+        : 0,
+    homeHpRemaining: state.homeHp,
+    homeHpMax: state.homeHpMax,
+    wavesCompleted: state.waveIndex,
+  };
+}
+
+function rollShopSlot(state: RunState, unitDefs: readonly UnitDef[]): ShopSlot {
   const cost = rollUnitCost(state);
   const candidates = unitDefs.filter((unit) => unit.cost === cost);
   const unit = state.privateState.shopRng.pick(candidates);

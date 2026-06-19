@@ -55,6 +55,16 @@ export interface CombatEntity {
   frozenDmgBonusPct: number;
   /** Incoming damage reduction from Fighter synergy */
   dmgReductionPct: number;
+  isMiniBoss: boolean;
+  isBoss: boolean;
+  specialTimerMs: number;
+}
+
+export interface BossTelegraph {
+  bossId: string;
+  columnGx: number;
+  remainingMs: number;
+  damage: number;
 }
 
 export interface CombatWorld {
@@ -68,6 +78,7 @@ export interface CombatWorld {
   leakedEnemyCount: number;
   waveEnded: boolean;
   combatLog: string[];
+  bossTelegraphs: BossTelegraph[];
   flowField: FlowField;
   enemyDefs: ReadonlyMap<string, EnemyDef>;
   /** Resolved synergy buff for all allies */
@@ -95,7 +106,11 @@ export interface CombatWorldInput {
   /** Assassin-specific crit bonuses */
   assassinBonus?: { critChancePct: number; critDmgBonusPct: number };
   /** Frost freeze params */
-  frostParams?: { freezeChancePct: number; freezeDurationS: number; frozenDmgBonusPct: number };
+  frostParams?: {
+    freezeChancePct: number;
+    freezeDurationS: number;
+    frozenDmgBonusPct: number;
+  };
   /** RNG seed for deterministic randomness in combat */
   rngSeed?: number;
 }
@@ -137,8 +152,15 @@ export function createCombatWorld(input: CombatWorldInput): CombatWorld {
   }
 
   const buff = input.allyBuff ?? {};
-  const assassin = input.assassinBonus ?? { critChancePct: 0, critDmgBonusPct: 0 };
-  const frost = input.frostParams ?? { freezeChancePct: 0, freezeDurationS: 0, frozenDmgBonusPct: 0 };
+  const assassin = input.assassinBonus ?? {
+    critChancePct: 0,
+    critDmgBonusPct: 0,
+  };
+  const frost = input.frostParams ?? {
+    freezeChancePct: 0,
+    freezeDurationS: 0,
+    frozenDmgBonusPct: 0,
+  };
 
   const unitDefs = new Map(input.unitDefs.map((unit) => [unit.id, unit]));
   const enemyDefs = new Map(input.enemyDefs.map((enemy) => [enemy.id, enemy]));
@@ -184,6 +206,9 @@ export function createCombatWorld(input: CombatWorldInput): CombatWorld {
       freezeDurationS: frost.freezeDurationS,
       frozenDmgBonusPct: frost.frozenDmgBonusPct,
       dmgReductionPct: buff.dmgReductionPct ?? 0,
+      isMiniBoss: false,
+      isBoss: false,
+      specialTimerMs: 0,
     };
   });
 
@@ -205,6 +230,7 @@ export function createCombatWorld(input: CombatWorldInput): CombatWorld {
     leakedEnemyCount: 0,
     waveEnded: false,
     combatLog: [],
+    bossTelegraphs: [],
     flowField,
     enemyDefs,
     allyBuff: buff,
@@ -221,6 +247,7 @@ export function stepCombatWorld(world: CombatWorld, dtMs: number): CombatWorld {
   world.elapsedMs += dtMs;
   spawnReadyEnemies(world);
   tickStatuses(world, dtMs);
+  updateBossSpecials(world, dtMs);
   moveEnemies(world, dtMs);
   attackWithAllies(world, dtMs);
   removeDeadEnemies(world);
@@ -401,31 +428,14 @@ function spawnReadyEnemies(world: CombatWorld): void {
     if (!def) throw new Error(`Missing enemy definition: ${spawn.enemyId}`);
     if (!gate) throw new Error(`Missing gate definition: ${spawn.gateId}`);
     const id = `enemy-${spawn.sequence.toString().padStart(3, "0")}-${def.id}`;
-    world.enemies.push({
-      id,
-      team: "enemy",
-      defId: def.id,
-      name: def.name,
-      role: "enemy",
-      tile: { gx: gate.gx, gy: gate.gy },
-      hp: def.stats.hp,
-      maxHp: def.stats.hp,
-      atk: def.stats.atk,
-      atkSpeed: 0,
-      range: def.stats.range,
-      armor: def.stats.armor,
-      moveSpeed: def.stats.moveSpeed,
-      attackTimerMs: 0,
-      moveProgress: 0,
-      critChance: 0,
-      critDmgBonus: 0,
-      ragebladeStacks: 0,
-      statuses: [],
-      freezeChancePct: 0,
-      freezeDurationS: 0,
-      frozenDmgBonusPct: 0,
-      dmgReductionPct: 0,
-    });
+    world.enemies.push(
+      createEnemyEntity(
+        id,
+        def,
+        { gx: gate.gx, gy: gate.gy },
+        world.wave.index,
+      ),
+    );
     world.combatLog.push(
       `${world.elapsedMs}:spawn:${id}:${gate.gx},${gate.gy}`,
     );
@@ -472,6 +482,7 @@ function attackWithAllies(world: CombatWorld, dtMs: number): void {
   for (const ally of [...world.allies].sort((a, b) =>
     a.id.localeCompare(b.id),
   )) {
+    if (ally.hp <= 0) continue;
     if (isFrozen(ally)) continue; // frozen allies skip attack
 
     // Effective attack speed includes rageblade stacks
@@ -520,7 +531,9 @@ function attackWithAllies(world: CombatWorld, dtMs: number): void {
       } else {
         target.statuses.push({ type: "frozen", remainingMs: durationMs });
       }
-      world.combatLog.push(`${world.elapsedMs}:freeze:${target.id}:${ally.freezeDurationS}s`);
+      world.combatLog.push(
+        `${world.elapsedMs}:freeze:${target.id}:${ally.freezeDurationS}s`,
+      );
     }
 
     // Rageblade: +5% atkSpeed stack on hit
@@ -539,6 +552,7 @@ function attackWithAllies(world: CombatWorld, dtMs: number): void {
 
 function removeDeadEnemies(world: CombatWorld): void {
   const survivors: CombatEntity[] = [];
+  const spawnedFromDeaths: CombatEntity[] = [];
   for (const enemy of world.enemies) {
     if (enemy.hp > 0) {
       survivors.push(enemy);
@@ -548,9 +562,135 @@ function removeDeadEnemies(world: CombatWorld): void {
     ) {
       world.defeatedEnemyCount += 1;
       world.combatLog.push(`${world.elapsedMs}:dead:${enemy.id}`);
+      spawnedFromDeaths.push(...createEnemyDeathSpawns(world, enemy));
     }
   }
-  world.enemies = survivors;
+  world.enemies = [...survivors, ...spawnedFromDeaths].sort((a, b) =>
+    a.id.localeCompare(b.id),
+  );
+}
+
+function updateBossSpecials(world: CombatWorld, dtMs: number): void {
+  for (const telegraph of [...world.bossTelegraphs]) {
+    telegraph.remainingMs -= dtMs;
+    if (telegraph.remainingMs > 0) continue;
+    for (const ally of world.allies) {
+      if (ally.hp <= 0) continue;
+      if (ally.tile.gx !== telegraph.columnGx) continue;
+      ally.hp = Math.max(0, ally.hp - telegraph.damage);
+      world.combatLog.push(
+        `${world.elapsedMs}:boss-column-hit:${telegraph.bossId}:${ally.id}:${telegraph.columnGx}:${ally.hp.toFixed(3)}`,
+      );
+    }
+    world.bossTelegraphs = world.bossTelegraphs.filter(
+      (item) => item !== telegraph,
+    );
+  }
+
+  for (const enemy of [...world.enemies].sort((a, b) =>
+    a.id.localeCompare(b.id),
+  )) {
+    if (enemy.hp <= 0) continue;
+    const def = world.enemyDefs.get(enemy.defId);
+    if (def?.special?.type !== "column-breath") continue;
+    if (world.bossTelegraphs.some((item) => item.bossId === enemy.id)) continue;
+    enemy.specialTimerMs += dtMs;
+    if (enemy.specialTimerMs < def.special.intervalMs) continue;
+    enemy.specialTimerMs = 0;
+    const columnGx = pickDragonColumn(world);
+    world.bossTelegraphs.push({
+      bossId: enemy.id,
+      columnGx,
+      remainingMs: def.special.telegraphMs,
+      damage: def.special.damage,
+    });
+    world.combatLog.push(
+      `${world.elapsedMs}:boss-telegraph:${enemy.id}:${columnGx}:${def.special.telegraphMs}`,
+    );
+  }
+}
+
+function pickDragonColumn(world: CombatWorld): number {
+  const liveAllies = world.allies.filter((ally) => ally.hp > 0);
+  if (liveAllies.length === 0) return world.level.homePos.gx;
+  const byColumn = new Map<number, { count: number; firstId: string }>();
+  for (const ally of [...liveAllies].sort((a, b) => a.id.localeCompare(b.id))) {
+    const current = byColumn.get(ally.tile.gx);
+    if (!current) {
+      byColumn.set(ally.tile.gx, { count: 1, firstId: ally.id });
+    } else {
+      current.count += 1;
+    }
+  }
+  return [...byColumn.entries()].sort((a, b) => {
+    if (a[1].count !== b[1].count) return b[1].count - a[1].count;
+    if (a[0] !== b[0]) return a[0] - b[0];
+    return a[1].firstId.localeCompare(b[1].firstId);
+  })[0][0];
+}
+
+function createEnemyDeathSpawns(
+  world: CombatWorld,
+  enemy: CombatEntity,
+): CombatEntity[] {
+  const def = world.enemyDefs.get(enemy.defId);
+  if (def?.onDeath?.type !== "split") return [];
+  const childDef = world.enemyDefs.get(def.onDeath.enemyId);
+  if (!childDef)
+    throw new Error(`Missing split enemy definition: ${def.onDeath.enemyId}`);
+  const spawned: CombatEntity[] = [];
+  for (let index = 0; index < def.onDeath.count; index += 1) {
+    const childId = `${enemy.id}-split-${index.toString().padStart(2, "0")}`;
+    spawned.push(
+      createEnemyEntity(childId, childDef, enemy.tile, world.wave.index, {
+        moveSpeedMultiplier: def.onDeath.moveSpeedMultiplier,
+      }),
+    );
+    world.combatLog.push(
+      `${world.elapsedMs}:split:${enemy.id}:${childId}:${enemy.tile.gx},${enemy.tile.gy}`,
+    );
+  }
+  return spawned;
+}
+
+function createEnemyEntity(
+  id: string,
+  def: EnemyDef,
+  tile: GridCoord,
+  waveIndex: number,
+  options: { moveSpeedMultiplier?: number } = {},
+): CombatEntity {
+  const hpScale = 1 + 0.18 * (waveIndex - 1);
+  const atkScale = 1 + 0.12 * (waveIndex - 1);
+  const hp = def.stats.hp * hpScale * (def.hpMultiplier ?? 1);
+  return {
+    id,
+    team: "enemy",
+    defId: def.id,
+    name: def.name,
+    role: "enemy",
+    tile: { ...tile },
+    hp,
+    maxHp: hp,
+    atk: def.stats.atk * atkScale,
+    atkSpeed: 0,
+    range: def.stats.range,
+    armor: def.stats.armor,
+    moveSpeed: def.stats.moveSpeed * (options.moveSpeedMultiplier ?? 1),
+    attackTimerMs: 0,
+    moveProgress: 0,
+    critChance: 0,
+    critDmgBonus: 0,
+    ragebladeStacks: 0,
+    statuses: [],
+    freezeChancePct: 0,
+    freezeDurationS: 0,
+    frozenDmgBonusPct: 0,
+    dmgReductionPct: 0,
+    isMiniBoss: def.isMiniBoss ?? false,
+    isBoss: def.isBoss ?? false,
+    specialTimerMs: 0,
+  };
 }
 
 function gridDistance(a: GridCoord, b: GridCoord): number {

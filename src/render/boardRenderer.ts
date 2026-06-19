@@ -16,6 +16,7 @@ export interface BoardRenderState {
     defeatedEnemies: number;
     leakedEnemies: number;
     waveEnded: boolean;
+    telegraphColumns?: readonly number[];
   };
   run?: {
     phase: string;
@@ -47,7 +48,14 @@ export function renderBoard(
     for (let gx = 0; gx < state.width; gx += 1) {
       const gy = depth - gx;
       if (gy < 0 || gy >= state.height) continue;
-      drawTile(ctx, projection, { gx, gy }, state.selected, markerCoord);
+      drawTile(
+        ctx,
+        projection,
+        { gx, gy },
+        state.selected,
+        markerCoord,
+        state.combat.telegraphColumns ?? [],
+      );
     }
   }
 
@@ -88,12 +96,14 @@ function drawTile(
   coord: GridCoord,
   selected: GridCoord | null,
   marker: GridCoord,
+  telegraphColumns: readonly number[],
 ): void {
   const center = gridToScreen(coord, projection);
   const halfW = projection.tileWidth / 2;
   const halfH = projection.tileHeight / 2;
   const isSelected = selected?.gx === coord.gx && selected.gy === coord.gy;
   const isMarker = marker.gx === coord.gx && marker.gy === coord.gy;
+  const isTelegraphed = telegraphColumns.includes(coord.gx);
 
   ctx.beginPath();
   ctx.moveTo(center.x, center.y - halfH);
@@ -103,11 +113,13 @@ function drawTile(
   ctx.closePath();
   ctx.fillStyle = isSelected
     ? TILE_SELECTED
-    : isMarker
-      ? "#c685ff"
-      : (coord.gx + coord.gy) % 2 === 0
-        ? TILE_FILL
-        : TILE_ALT_FILL;
+    : isTelegraphed
+      ? "#ff6b35"
+      : isMarker
+        ? "#c685ff"
+        : (coord.gx + coord.gy) % 2 === 0
+          ? TILE_FILL
+          : TILE_ALT_FILL;
   ctx.strokeStyle = isSelected ? "#fff4c2" : TILE_STROKE;
   ctx.lineWidth = isSelected ? 2 : 1;
   ctx.fill();

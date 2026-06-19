@@ -76,14 +76,42 @@ simulation utilities, and isometric board interaction described in
   multi-level progression.
 - Board placement is limited by the unit cap associated with the current player
   level.
-- Selling units refunds according to star rank and original unit cost:
-  1-star = cost, 2-star = cost x 3 - 1, 3-star = cost x 9 - 1.
+- Selling units refunds according to star rank and original unit cost: 1-star =
+  cost, 2-star = cost x 3 - 1, 3-star = cost x 9 - 1.
 - Buying or moving units triggers auto-merge: three units with the same
   definition and star rank merge into one higher-star unit up to 3-star.
 - Shop reroll costs 2 gold, refuses when gold is insufficient, and rolls from
   the seeded shop RNG.
 - The browser HUD exposes interest, streaks, EXP progress, level cap, reroll,
   buy EXP, star rank, and refund information for the M4 slice.
+
+## M5 Synergy & Item Contract
+
+- Board synergies count distinct unit definitions per trait and activate the
+  Fighter, Assassin, Frost, and Tech breakpoints from `docs/PRODUCT_SPEC.md`.
+- Combat world creation applies active synergy and equipped item stats to allied
+  combat entities deterministically.
+- Allied targeting supports the four MVP roles: Tanker nearest target, Marksman
+  closest-to-home target, Mage densest enemy cluster, and Assassin weakest
+  target.
+- The run supports a basic item inventory, MVP component recipes, item equip cap
+  of 3 per unit, and item return when selling a unit.
+- The browser HUD exposes active synergy progress and unit item slots.
+
+## M6 Boss & Chapter Contract
+
+- Chapter 1 has a playable 10-wave sequence matching the MVP campaign shape:
+  ordinary waves, a Vua Slime mini-boss at wave 5, and a Rồng Máy boss at
+  wave 10.
+- Enemy definitions can mark mini-boss and boss entities, scale their stats by
+  wave, and attach deterministic special behavior hooks.
+- Vua Slime splits into 8 fast Slime Con enemies on death.
+- Rồng Máy periodically telegraphs a board column before damaging allied units
+  in that column.
+- The run reaches a final result only after the last Chapter 1 wave resolves,
+  reports win/loss, and awards 1-3 stars from remaining home HP percentage.
+- The browser HUD exposes boss/miniboss wave state, telegraph state, and final
+  result stars for the M6 slice.
 
 ## Non-Goals
 
@@ -97,6 +125,10 @@ simulation utilities, and isometric board interaction described in
   synergy buffs, boss behavior, save data, audio, or real drag-and-drop UI.
 - M4 has no synergy buffs, item handling, boss behavior, save data, audio, real
   drag-and-drop UI, or campaign/meta progression.
+- M5 has no boss behavior, full chapter result screen, meta progression, save
+  data, audio, real drag-and-drop UI, or campaign map.
+- M6 has no meta progression, save data, challenge modifiers, audio, real
+  drag-and-drop UI, or campaign map.
 - No WebGL, Tauri, or external game engine.
 
 ## Validation Expectations
@@ -111,4 +143,8 @@ simulation utilities, and isometric board interaction described in
   transitions, and one-wave setup-to-combat resolution.
 - Unit tests cover M4 income, streaks, EXP/level progression, reroll cost,
   star-rank refunds, auto-merge, and level-cap placement.
+- Unit tests cover M5 synergy breakpoints, targeting roles, item recipes, equip
+  limits, and item return on sell.
+- Unit tests cover M6 chapter wave data, Vua Slime split on death, Rồng Máy
+  column telegraph damage, final win/loss, and star rating thresholds.
 - A production build must succeed.
