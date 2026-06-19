@@ -4,12 +4,6 @@ source = haketienloc10/repo-harness
 ref = main
 
 [files]
-.agents/skills/deepwiki/SKILL.md
-.agents/skills/deepwiki/wiki.json
-.agents/skills/knowledge-index/SKILL.md
-.editorconfig
-.prettierignore
-.prettierrc
 _harness/00-AGENTS.md
 _harness/01-WORKFLOW.md
 _harness/02-STANDARDS.md
@@ -50,8 +44,3 @@ _harness/skills/_TEMPLATE.md
 _harness/skills/generate-knowledge-index.md
 _harness/skills/quality-gate-review.md
 _harness/skills/tdd-red-green.md
-docs/decisions/README.md
-docs/product/README.md
-docs/stories/README.md
-docs/stories/backlog.md
-docs/stories/epics/README.md
