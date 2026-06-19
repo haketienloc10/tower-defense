@@ -113,6 +113,20 @@ simulation utilities, and isometric board interaction described in
 - The browser HUD exposes boss/miniboss wave state, telegraph state, and final
   result stars for the M6 slice.
 
+## M7 Visual Polish Contract
+
+- Allied units and enemies render with distinct character art instead of shared
+  placeholder shapes.
+- Combat presentation includes readable hit flashes, damage numbers,
+  attack/projectile cues, death bursts, skill casts, boss telegraphs, and
+  level-up/merge celebrations without changing deterministic combat outcomes.
+- Character art metadata remains data-driven from unit and enemy definitions so
+  future spritesheets can replace current assets without changing simulation.
+- The board presentation feels livelier with ambient tile variation, home/gate
+  markers, shadows, health bars, star markers, and phase-sensitive HUD feedback.
+- Visual effects are render-only or derived from already deterministic state;
+  they must not call random game logic or alter combat resolution.
+
 ## Non-Goals
 
 - M0 has no combat, shop, data loading, spritesheet animation, audio, save data,
@@ -129,6 +143,8 @@ simulation utilities, and isometric board interaction described in
   data, audio, real drag-and-drop UI, or campaign map.
 - M6 has no meta progression, save data, challenge modifiers, audio, real
   drag-and-drop UI, or campaign map.
+- M7 has no new combat balance, audio system, save/meta progression, WebGL
+  renderer, campaign map, or full drag-and-drop UI.
 - No WebGL, Tauri, or external game engine.
 
 ## Validation Expectations
@@ -147,4 +163,6 @@ simulation utilities, and isometric board interaction described in
   limits, and item return on sell.
 - Unit tests cover M6 chapter wave data, Vua Slime split on death, Rồng Máy
   column telegraph damage, final win/loss, and star rating thresholds.
+- Unit tests cover M7 data-driven render metadata and render-only visual event
+  derivation where feasible.
 - A production build must succeed.

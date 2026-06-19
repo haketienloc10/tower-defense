@@ -20,7 +20,9 @@ progress. M3 thêm run state setup/combat/result, deterministic shop,
 buy/place/sell từ shop và bench. M4 thêm kinh tế wave với lãi/chuỗi/clean bonus,
 EXP/level cap, reroll, buy EXP, refund theo sao và auto-merge 3-to-1. M5 thêm
 synergy/item/targeting role cơ bản; M6 thêm Chapter 1 10 wave với Vua Slime
-split, Rồng Máy telegraph theo cột, final win/loss và star rating.
+split, Rồng Máy telegraph theo cột, final win/loss và star rating. M7 thêm
+visual polish với character concept atlas, metadata sprite data-driven và hiệu
+ứng Canvas render-only cho combat/UI.
 
 <!-- KNOWLEDGE:PURPOSE:END -->
 
@@ -63,6 +65,8 @@ split, Rồng Máy telegraph theo cột, final win/loss và star rating.
 - `docs/decisions/` — Decision records bền vững khi đổi kiến trúc/API/security.
 - `docs/product/` — Product contract được xé nhỏ từ spec và story.
 - `docs/stories/` — Story packets, backlog và kế hoạch triển khai theo epic.
+- `src/assets/` — Chứa bitmap asset dự án như concept atlas cho lính/quái được
+  Vite bundle vào browser app.
 - `src/core/` — Core engine utilities thuần như fixed-step loop và seeded RNG.
 - `src/data/` — Typed JSON-style gameplay definitions for units, traits, enemies
   and the first level.

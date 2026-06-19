@@ -475,9 +475,12 @@ export function createRunBoardActors(
       unitId: def.id,
       name: `${def.name} ${unit.star}*`,
       cost: def.cost,
+      role: def.role,
       traits: def.traits,
       tile: unit.tile,
       color: def.sprite.color,
+      sprite: def.sprite,
+      star: unit.star,
     };
   });
 }

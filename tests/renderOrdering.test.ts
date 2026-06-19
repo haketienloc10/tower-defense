@@ -33,8 +33,19 @@ function actor(id: string, gx: number, gy: number): BoardActor {
     unitId: id,
     name: id,
     cost: 1,
+    role: "Tanker",
     traits: [],
     tile: { gx, gy },
     color: "#ffffff",
+    sprite: {
+      id,
+      color: "#ffffff",
+      accentColor: "#d8e2ff",
+      glowColor: "#9fc4ff",
+      shape: "guard",
+      projectileColor: "#9fc4ff",
+      anchor: "bottom-center",
+    },
+    star: 1,
   };
 }

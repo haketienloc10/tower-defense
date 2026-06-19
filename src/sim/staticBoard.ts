@@ -1,5 +1,11 @@
 import type { GridCoord } from "../math/iso";
-import type { UnitDef, UnitCost, TraitId } from "../data/types";
+import type {
+  SpriteDef,
+  TraitId,
+  UnitCost,
+  UnitDef,
+  UnitRole,
+} from "../data/types";
 
 export interface BoardActor {
   id: string;
@@ -7,10 +13,15 @@ export interface BoardActor {
   unitId: string;
   name: string;
   cost: UnitCost;
+  role: UnitRole | "enemy";
   traits: readonly TraitId[];
   tile: GridCoord;
   color: string;
+  sprite: SpriteDef;
+  star?: 1 | 2 | 3;
   hpRatio?: number;
+  isMiniBoss?: boolean;
+  isBoss?: boolean;
 }
 
 const PREVIEW_SLOTS: readonly { unitId: string; tile: GridCoord }[] = [
@@ -34,9 +45,12 @@ export function createStaticBoardActors(
       unitId: def.id,
       name: def.name,
       cost: def.cost,
+      role: def.role,
       traits: def.traits,
       tile,
       color: def.sprite.color,
+      sprite: def.sprite,
+      star: 1,
     };
   });
 }

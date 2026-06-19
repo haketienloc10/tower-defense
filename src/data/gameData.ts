@@ -3,8 +3,10 @@ import type {
   ItemDef,
   ItemRecipe,
   LevelDef,
+  SpriteDef,
   TraitDef,
   UnitDef,
+  VisualShape,
 } from "./types";
 
 export const UNIT_DEFS = [
@@ -458,7 +460,7 @@ function unit(
     baseStats,
     skill,
     starScaling: 1.8,
-    sprite: { id, color, anchor: "bottom-center" },
+    sprite: unitSprite(id, color),
   };
 }
 
@@ -480,6 +482,7 @@ function enemy(
     behavior,
     stats: { hp, atk, armor, moveSpeed, range },
     rewardGold,
+    sprite: enemySprite(id),
     ...overrides,
   };
 }
@@ -501,5 +504,208 @@ function wave(
         ? [{ ...extra, gateId: "north-gate", intervalMs: intervalMs + 100 }]
         : []),
     ],
+  };
+}
+
+function unitSprite(id: UnitDef["id"], color: string): SpriteDef {
+  const visuals: Record<
+    string,
+    {
+      shape: VisualShape;
+      accentColor: string;
+      glowColor: string;
+      projectileColor: string;
+      conceptFrame: { col: number; row: number };
+    }
+  > = {
+    "iron-guard": {
+      shape: "guard",
+      accentColor: "#d8e2ff",
+      glowColor: "#6ea8ff",
+      projectileColor: "#9fc4ff",
+      conceptFrame: { col: 0, row: 0 },
+    },
+    "trainee-archer": {
+      shape: "archer",
+      accentColor: "#eafffb",
+      glowColor: "#7eead7",
+      projectileColor: "#b5fff0",
+      conceptFrame: { col: 1, row: 0 },
+    },
+    dagger: {
+      shape: "assassin",
+      accentColor: "#f4d5ff",
+      glowColor: "#c47aff",
+      projectileColor: "#f0a7ff",
+      conceptFrame: { col: 2, row: 0 },
+    },
+    "frost-knight": {
+      shape: "knight",
+      accentColor: "#eff9ff",
+      glowColor: "#87d6ff",
+      projectileColor: "#c8f5ff",
+      conceptFrame: { col: 3, row: 0 },
+    },
+    "fire-mage": {
+      shape: "mage",
+      accentColor: "#ffe0c8",
+      glowColor: "#ff8a3d",
+      projectileColor: "#ffcf5a",
+      conceptFrame: { col: 0, row: 1 },
+    },
+    "shadow-assassin": {
+      shape: "assassin",
+      accentColor: "#ead8ff",
+      glowColor: "#8a5cff",
+      projectileColor: "#d194ff",
+      conceptFrame: { col: 1, row: 1 },
+    },
+    "laser-gunner": {
+      shape: "gunner",
+      accentColor: "#d8fbff",
+      glowColor: "#36d8ff",
+      projectileColor: "#5af3ff",
+      conceptFrame: { col: 2, row: 1 },
+    },
+    "frost-warden": {
+      shape: "knight",
+      accentColor: "#ffffff",
+      glowColor: "#aee9ff",
+      projectileColor: "#d6fbff",
+      conceptFrame: { col: 3, row: 1 },
+    },
+    "frost-mage": {
+      shape: "mage",
+      accentColor: "#e8fdff",
+      glowColor: "#8cefff",
+      projectileColor: "#c8fbff",
+      conceptFrame: { col: 0, row: 2 },
+    },
+    archmage: {
+      shape: "mage",
+      accentColor: "#fff2ce",
+      glowColor: "#ffc149",
+      projectileColor: "#ffde7a",
+      conceptFrame: { col: 1, row: 2 },
+    },
+    executor: {
+      shape: "assassin",
+      accentColor: "#ffd5df",
+      glowColor: "#ff5f88",
+      projectileColor: "#ff9ab1",
+      conceptFrame: { col: 2, row: 2 },
+    },
+    "mecha-general": {
+      shape: "general",
+      accentColor: "#fff1ba",
+      glowColor: "#ffd166",
+      projectileColor: "#ffe27a",
+      conceptFrame: { col: 3, row: 2 },
+    },
+  };
+  const visual = visuals[id] ?? {
+    shape: "guard" as const,
+    accentColor: "#ffffff",
+    glowColor: color,
+    projectileColor: color,
+    conceptFrame: { col: 0, row: 0 },
+  };
+  return {
+    id,
+    color,
+    anchor: "bottom-center",
+    ...visual,
+  };
+}
+
+function enemySprite(id: EnemyDef["id"]): SpriteDef {
+  const visuals: Record<
+    string,
+    {
+      color: string;
+      accentColor: string;
+      glowColor: string;
+      shape: VisualShape;
+      projectileColor: string;
+      conceptFrame: { col: number; row: number };
+    }
+  > = {
+    slime: {
+      color: "#7cef8a",
+      accentColor: "#d8ffd9",
+      glowColor: "#4de06b",
+      shape: "slime",
+      projectileColor: "#b8ffb8",
+      conceptFrame: { col: 0, row: 0 },
+    },
+    "runner-goblin": {
+      color: "#d7ec63",
+      accentColor: "#fff6a8",
+      glowColor: "#f0e74d",
+      shape: "runner",
+      projectileColor: "#faff8f",
+      conceptFrame: { col: 1, row: 0 },
+    },
+    "orc-brute": {
+      color: "#b46a41",
+      accentColor: "#ffd49e",
+      glowColor: "#ff8a3d",
+      shape: "brute",
+      projectileColor: "#ffb46b",
+      conceptFrame: { col: 2, row: 0 },
+    },
+    bat: {
+      color: "#875cff",
+      accentColor: "#dfd0ff",
+      glowColor: "#b17aff",
+      shape: "bat",
+      projectileColor: "#c8a8ff",
+      conceptFrame: { col: 3, row: 0 },
+    },
+    "shield-soldier": {
+      color: "#89939e",
+      accentColor: "#e5eef7",
+      glowColor: "#9fb4c8",
+      shape: "shield",
+      projectileColor: "#ccd7e4",
+      conceptFrame: { col: 0, row: 1 },
+    },
+    "bomb-runner": {
+      color: "#ff6859",
+      accentColor: "#ffe5a8",
+      glowColor: "#ffb347",
+      shape: "bomb",
+      projectileColor: "#ffdf78",
+      conceptFrame: { col: 1, row: 1 },
+    },
+    "slime-king": {
+      color: "#3eea69",
+      accentColor: "#fff06b",
+      glowColor: "#72ff8a",
+      shape: "slime-king",
+      projectileColor: "#caff80",
+      conceptFrame: { col: 2, row: 1 },
+    },
+    "mecha-dragon": {
+      color: "#ff5f6d",
+      accentColor: "#ffe66d",
+      glowColor: "#ff9f1c",
+      shape: "dragon",
+      projectileColor: "#ffef6e",
+      conceptFrame: { col: 3, row: 1 },
+    },
+  };
+  const visual = visuals[id] ?? {
+    color: "#ff7d6e",
+    accentColor: "#ffd8d2",
+    glowColor: "#ff7d6e",
+    shape: "runner" as const,
+    projectileColor: "#ffd0c8",
+    conceptFrame: { col: 0, row: 0 },
+  };
+  return {
+    id,
+    anchor: "bottom-center",
+    ...visual,
   };
 }

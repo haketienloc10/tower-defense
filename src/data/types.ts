@@ -2,6 +2,22 @@ export type TraitId = "fighter" | "tech" | "frost" | "assassin";
 export type UnitCost = 1 | 2 | 3 | 4 | 5;
 export type UnitRole = "Tanker" | "Marksman" | "Mage" | "Assassin";
 export type ItemTier = "component" | "completed";
+export type VisualShape =
+  | "guard"
+  | "archer"
+  | "assassin"
+  | "knight"
+  | "mage"
+  | "gunner"
+  | "general"
+  | "slime"
+  | "runner"
+  | "brute"
+  | "shield"
+  | "bat"
+  | "bomb"
+  | "slime-king"
+  | "dragon";
 
 export interface Stats {
   hp: number;
@@ -16,6 +32,11 @@ export interface Stats {
 export interface SpriteDef {
   id: string;
   color: string;
+  accentColor: string;
+  glowColor: string;
+  shape: VisualShape;
+  projectileColor: string;
+  conceptFrame?: { col: number; row: number };
   anchor: "bottom-center";
 }
 
@@ -109,6 +130,7 @@ export interface EnemyDef {
     range: number;
   };
   rewardGold: number;
+  sprite: SpriteDef;
   isMiniBoss?: boolean;
   isBoss?: boolean;
   hpMultiplier?: number;

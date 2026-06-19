@@ -10,6 +10,11 @@ import {
 import { createCanvasApp } from "./platform/canvas";
 import { renderBoard } from "./render/boardRenderer";
 import {
+  deriveCombatVisualEvents,
+  type ActorVisualSnapshot,
+  type VisualEvent,
+} from "./render/visualEvents";
+import {
   CHAPTER_1_LEVEL,
   ENEMY_DEFS,
   UNIT_DEFS,
@@ -42,6 +47,10 @@ import { computeActiveSynergies } from "./sim/synergy";
 const SEED = 17321;
 const GRID_WIDTH = CHAPTER_1_LEVEL.gridSize.w;
 const GRID_HEIGHT = CHAPTER_1_LEVEL.gridSize.h;
+const characterConceptSheetUrl = new URL(
+  "./assets/character-concepts.png",
+  import.meta.url,
+).href;
 
 const root = document.querySelector<HTMLElement>("#app");
 if (!root) {
@@ -63,6 +72,7 @@ const content = {
   items: ITEM_DEFS,
   recipes: ITEM_RECIPES,
 };
+const enemyDefsById = new Map(ENEMY_DEFS.map((enemy) => [enemy.id, enemy]));
 const run = createRunState(SEED, CHAPTER_1_LEVEL, content);
 const state = {
   tick: 0,
@@ -70,6 +80,8 @@ const state = {
   selectedUnitId: null as string | null,
   message: "Buy a unit, select it, click a tile, then start combat.",
   sparkleTile: rng.int(GRID_WIDTH * GRID_HEIGHT),
+  visualEffects: [] as VisualEvent[],
+  lastActorSnapshot: [] as ActorVisualSnapshot[],
 };
 
 const controls = document.createElement("section");
@@ -89,7 +101,10 @@ ctx.canvas.addEventListener("click", (event) => {
     state.message = result.ok
       ? "Unit placed."
       : (result.error ?? "Action failed.");
-    if (result.ok) state.selectedUnitId = null;
+    if (result.ok) {
+      addVisualEffect("level-up", state.selected, "#ffe66d", 36);
+      state.selectedUnitId = null;
+    }
   } else if (state.selected) {
     const selectedTile = state.selected;
     const unit = run.board.find(
@@ -114,6 +129,42 @@ const loop = new FixedStepLoop(
     projection.originX = Math.floor(window.innerWidth / 2);
     renderControls(run);
     const combatWorld = run.combatWorld;
+    const actors = [
+      ...createRunBoardActors(run, UNIT_DEFS),
+      ...(combatWorld?.enemies ?? []).map((enemy) => {
+        const def = enemyDefsById.get(enemy.defId);
+        if (!def) {
+          throw new Error(`Missing enemy definition: ${enemy.defId}`);
+        }
+        return {
+          id: enemy.id,
+          team: enemy.team,
+          unitId: enemy.defId,
+          name: enemy.name,
+          cost: 1 as const,
+          role: "enemy" as const,
+          traits: [],
+          tile: enemy.tile,
+          color: def.sprite.color,
+          sprite: def.sprite,
+          hpRatio: enemy.hp / enemy.maxHp,
+          isMiniBoss: enemy.isMiniBoss,
+          isBoss: enemy.isBoss,
+        };
+      }),
+    ];
+    const nextSnapshot = toActorSnapshot(actors);
+    state.visualEffects.push(
+      ...deriveCombatVisualEvents(
+        state.lastActorSnapshot,
+        nextSnapshot,
+        state.tick,
+      ),
+    );
+    state.lastActorSnapshot = nextSnapshot;
+    state.visualEffects = state.visualEffects.filter(
+      (effect) => state.tick - effect.createdTick <= effect.durationTicks,
+    );
     renderBoard(ctx, projection, {
       width: GRID_WIDTH,
       height: GRID_HEIGHT,
@@ -122,20 +173,10 @@ const loop = new FixedStepLoop(
       tick: state.tick,
       seed: SEED,
       levelName: CHAPTER_1_LEVEL.name,
-      actors: [
-        ...createRunBoardActors(run, UNIT_DEFS),
-        ...(combatWorld?.enemies ?? []).map((enemy) => ({
-          id: enemy.id,
-          team: enemy.team,
-          unitId: enemy.defId,
-          name: enemy.name,
-          cost: 1 as const,
-          traits: [],
-          tile: enemy.tile,
-          color: "#ff7d6e",
-          hpRatio: enemy.hp / enemy.maxHp,
-        })),
-      ],
+      home: CHAPTER_1_LEVEL.homePos,
+      gates: CHAPTER_1_LEVEL.gates,
+      actors,
+      effects: state.visualEffects,
       combat: {
         waveIndex: run.waveIndex,
         aliveEnemies: combatWorld?.enemies.length ?? 0,
@@ -220,6 +261,10 @@ function renderControls(runState: RunState): void {
         })
         .join(" ")}
     </div>
+    <div class="control-row visual-atlas">
+      <img src="${characterConceptSheetUrl}" alt="Generated character concept sheet" />
+      <span>Visual atlas: lính/quái có silhouette riêng, Canvas render dùng metadata cùng style.</span>
+    </div>
     <div class="control-row shop">
       ${runState.shop
         .map((slot, index) => {
@@ -295,6 +340,7 @@ function renderControls(runState: RunState): void {
         state.message = result.ok
           ? "Unit bought to bench."
           : (result.error ?? "Buy failed.");
+        if (result.ok) addHudPulse("#7eead7");
         renderControls(runState);
       };
     });
@@ -305,6 +351,7 @@ function renderControls(runState: RunState): void {
       state.message = result.ok
         ? "Shop rerolled."
         : (result.error ?? "Reroll failed.");
+      if (result.ok) addHudPulse("#c685ff");
       renderControls(runState);
     });
   controls
@@ -314,6 +361,7 @@ function renderControls(runState: RunState): void {
       state.message = result.ok
         ? "EXP bought."
         : (result.error ?? "EXP failed.");
+      if (result.ok) addHudPulse("#ffe66d");
       renderControls(runState);
     });
   controls
@@ -333,6 +381,11 @@ function renderControls(runState: RunState): void {
         ? "Combat started."
         : (result.error ?? "Start failed.");
       state.selectedUnitId = null;
+      if (result.ok) {
+        for (const unit of runState.board) {
+          if (unit.tile) addVisualEffect("skill", unit.tile, "#7eead7", 42);
+        }
+      }
       renderControls(runState);
     });
   controls
@@ -343,6 +396,7 @@ function renderControls(runState: RunState): void {
       state.message = result.ok
         ? "Unit moved to bench."
         : (result.error ?? "Bench failed.");
+      if (result.ok) addHudPulse("#8cefff");
       state.selectedUnitId = null;
       renderControls(runState);
     });
@@ -354,6 +408,7 @@ function renderControls(runState: RunState): void {
       state.message = result.ok
         ? "Unit sold."
         : (result.error ?? "Sell failed.");
+      if (result.ok) addHudPulse("#ff9c66");
       state.selectedUnitId = null;
       renderControls(runState);
     });
@@ -365,6 +420,7 @@ function renderControls(runState: RunState): void {
       const item = components[rng.int(components.length)];
       grantItem(runState, item.id);
       state.message = `Granted ${item.name}.`;
+      addHudPulse("#ffd166");
       renderControls(runState);
     });
 
@@ -377,6 +433,7 @@ function renderControls(runState: RunState): void {
         state.message = result.ok
           ? `Crafted ${recipeId}.`
           : (result.error ?? "Craft failed.");
+        if (result.ok) addHudPulse("#ffbf69");
         renderControls(runState);
       };
     });
@@ -391,7 +448,55 @@ function renderControls(runState: RunState): void {
         state.message = result.ok
           ? `Equipped ${itemId}.`
           : (result.error ?? "Equip failed.");
+        if (result.ok) {
+          const unit = [...runState.board, ...runState.bench].find(
+            (item) => item.id === state.selectedUnitId,
+          );
+          if (unit?.tile) addVisualEffect("skill", unit.tile, "#ffd166", 32);
+        }
         renderControls(runState);
       };
     });
+}
+
+function toActorSnapshot(
+  actors: readonly {
+    id: string;
+    team: "ally" | "enemy";
+    tile: GridCoord;
+    hpRatio?: number;
+  }[],
+): ActorVisualSnapshot[] {
+  return actors.map((actor) => ({
+    id: actor.id,
+    team: actor.team,
+    tile: actor.tile,
+    hpRatio: actor.hpRatio,
+  }));
+}
+
+function addVisualEffect(
+  kind: VisualEvent["kind"],
+  tile: GridCoord,
+  color: string,
+  durationTicks: number,
+): void {
+  state.visualEffects.push({
+    id: `${kind}-${state.tick}-${tile.gx}-${tile.gy}-${state.visualEffects.length}`,
+    kind,
+    tile,
+    team: "neutral",
+    createdTick: state.tick,
+    durationTicks,
+    color,
+  });
+}
+
+function addHudPulse(color: string): void {
+  addVisualEffect(
+    "level-up",
+    state.selected ?? CHAPTER_1_LEVEL.homePos,
+    color,
+    24,
+  );
 }
